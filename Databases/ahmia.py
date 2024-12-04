@@ -75,8 +75,9 @@ def ahmia_dashboard():
             if selected_index is not None:
                 # Mostra il record selezionato
                 selected_record = df.loc[selected_index]
-                st.write("Record selezionato:")
-                st.json(selected_record.to_dict())
+                #st.write("Record selezionato:")
+                with st.expander("Record selezionato"):
+                    st.json(selected_record.to_dict())
 
                 # Modifica del record
                 st.subheader("Modifica Record")

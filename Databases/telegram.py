@@ -62,8 +62,9 @@ def telegram_dashboard():
 
         ## Selezione del messaggio da analizzare
         if not df.empty:
-            st.subheader(f"Dati della collezione: {selected_collection} (Database: {db_name})")
-            st.dataframe(df)
+            #st.subheader(f"Dati della collezione: {selected_collection} (Database: {db_name})")
+            with st.expander(f"Dati della collezione: {selected_collection} (Database: {db_name})"):
+                st.dataframe(df)
 
             #seleziona un record
             selected_index = st.selectbox("Seleiona un record", df.index)
@@ -71,8 +72,9 @@ def telegram_dashboard():
             if selected_index is not None:
                 # Mostra il record selezionato
                 selected_record = df.loc[selected_index]
-                st.write("Record selezionato:")
-                st.json(selected_record.to_dict())
+                #st.write("Record selezionato:")
+                with st.expander("Record selezionato"):
+                    st.json(selected_record.to_dict())
 
                 # Modifica del record
                 st.subheader("Modifica Record")
@@ -103,10 +105,10 @@ def telegram_dashboard():
             revisionati = df[df.get("revisioned", "no") == "yes"]
             if not revisionati.empty:
                 st.subheader("Messaggi revisionati")
-                st.dataframe(revisionati[["title", "danger_level", "user_comment"]])
+                st.dataframe(revisionati[["message", "danger_level", "user_comment"]])
 
                 # Modifica feedback
-                revisionati["selezione"] = revisionati["title"] + " (ID: " + revisionati["_id"] + ")"
+                revisionati["selezione"] = revisionati["message"] + " (ID: " + revisionati["_id"] + ")"
                 selected_revised = st.selectbox(
                     "Seleziona un messaggio revisionato per cambiare feedback",
                     revisionati["selezione"]
@@ -115,7 +117,7 @@ def telegram_dashboard():
                     record_id = selected_revised.split("ID: ")[-1].replace(")", "").strip()
                     record = revisionati[revisionati["_id"] == record_id].iloc[0]
                     st.write("**Contenuto del messaggio:**")
-                    st.write(record["title"])
+                    st.write(record["message"])
 
                     # Form per modificare feedback
                     #nuovo_pericolosita = st.selectbox("Nuovo livello di pericolosità", ["Basso", "Medio", "Alto"])
