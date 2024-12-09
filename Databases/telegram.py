@@ -3,6 +3,8 @@ import pandas as pd
 from pymongo import MongoClient
 from bson.objectid import ObjectId
 import math
+from datetime import datetime, timedelta
+from st_aggrid import AgGrid, GridOptionsBuilder
 
 if "rerun" in st.session_state and st.session_state["rerun"]:
     st.session_state["rerun"] = False
@@ -45,6 +47,25 @@ def update_record(record_id, pericolosita, comment, revised_by, collection):
         }
     )
 
+def show_messages_from_collection(client, db_name, collection_name, fields_to_include):
+    # Ottieni la collezione specifica
+    collection = client[db_name][collection_name]
+    
+    # Ottieni i messaggi dalla collezione con solo i campi richiesti
+    cursor = collection.find({}, fields_to_include)  # Proiezione dei campi
+    messages = list(cursor)  # Converte il cursore in una lista
+    
+    # Rimuove il campo _id o lo trasforma in stringa per compatibilità con Pandas
+    for message in messages:
+        message["_id"] = str(message["_id"])  # Converte l'_id in stringa
+    
+    # Converte in DataFrame di Pandas
+    df = pd.DataFrame(messages)
+    
+    # Ritorna il DataFrame
+    return df
+
+
 # Dashboard principale
 def telegram_dashboard():
     st.title("Telegram Scraping Dashboard")
@@ -57,6 +78,105 @@ def telegram_dashboard():
     collections = get_collections(client, db_name)
     selected_collection = st.selectbox("Seleziona una collezione", collections)
 
+#################PRIMA SEZIONE DASHBOARD
+    num_group = len(collections)
+    num_channel = len(collections)
+
+    #numero di messaggi nuovi per collezione
+    start_of_today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    num_messages_today = 0
+    for col_name in selected_collection: #conta i nuovi messaggi dalla collezione selezionata (modificare con "collections" nel caso di una unica)
+        collection = client[db_name][col_name]
+        num_messages_today += collection.count_documents({"timestamp": {"$gte": start_of_today}})
+
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.markdown(
+            f"<h1 style='text-align: center; color: #4CAF50;'>{num_group}</h1>"
+            f"<h4 style='text-align: center;'>Gruppi monitorati</h4>",
+            unsafe_allow_html=True
+    )
+
+    with col2:
+        st.markdown(
+            f"<h1 style='text-align: center; color: #2196F3;'>{num_channel}</h1>"
+            f"<h4 style='text-align: center;'>Canali monitorati</h4>",
+            unsafe_allow_html=True
+        )
+
+    with col3:
+        st.markdown(
+            f"<h1 style='text-align: center; color: #FF5722;'>{num_messages_today}</h1>"
+            f"<h4 style='text-align: center;'>Nuovi messaggi oggi</h4>",
+            unsafe_allow_html=True
+        )
+#################PRIMA SEZIONE DASHBOARD
+
+#################SECONDA SEZIONE DASHBOARD
+    col1, col2 = st.columns(2)
+    #selected_collection = st.selectbox("Seleziona una collezione", collections) #scommentare se si vuole sotto a "statistiche" questa scelta
+
+    # Definisci i campi che vuoi visualizzare
+    fields_to_include = {
+        "id": 1,  
+        "message": 1,  
+        "danger_level": 1,  
+        "revised_by": 1,  
+        "revisioned": 1,
+        "user_comment": 1,
+        "date": 1
+        #inserire autore quando ci sarà
+    }
+
+    with col1:
+        if selected_collection:
+            st.subheader(f"Messaggi della collezione: {selected_collection}")
+            df = show_messages_from_collection(client, db_name, selected_collection, fields_to_include)
+
+            if not df.empty:
+                # Visualizza una lista dei campi disponibili nel DataFrame
+                available_columns = list(df.columns)
+                selected_fields = st.multiselect("Seleziona i campi da mostrare:", available_columns, default=available_columns)
+
+                # Filtra il DataFrame per mostrare solo i campi selezionati
+                filtered_df = df[selected_fields] if selected_fields else df
+
+                # Mostra la tabella con i campi selezionati
+                st.dataframe(filtered_df)
+
+                # Seleziona una riga dalla tabella usando il messaggio come opzione visibile
+                selected_index = None
+                if 'message' in filtered_df.columns:  # Verifica che la colonna 'message' esista
+                    selected_index = st.selectbox(
+                        "Seleziona una riga per vedere i dettagli",
+                        options=[None] + list(filtered_df.index),  # Aggiungi l'opzione None
+                        format_func=lambda idx: filtered_df.loc[idx, 'message'] if idx is not None else "Nessuna selezione"
+                    )
+                else:
+                    selected_index = st.selectbox(
+                        "Seleziona una riga per vedere i dettagli",
+                        options=[None] + list(filtered_df.index),  # Aggiungi l'opzione None
+                        format_func=lambda idx: f"Riga {idx}" if idx is not None else "Nessuna selezione"
+                    )
+
+                # Mostra i dettagli solo se una riga è stata selezionata
+                if selected_index is not None:
+                    # Mostra i dettagli della riga selezionata
+                    selected_message = df.loc[selected_index]
+                    st.subheader("**Dettagli del Messaggio**")
+                    for field in available_columns:  # Mostra tutti i campi nella riga selezionata
+                        st.write(f"- **{field.capitalize()}**: {selected_message[field]}")
+        else:
+            st.info("Nessun messaggio trovato nella collezione selezionata.")
+
+
+    with col2:
+        st.write("utenti attivi")
+#################SECONDA SEZIONE DASHBOARD
+
+#################TERZA SEZIONE DASHBOARD (Feedback e pericolosità)
+    ####Impostare il fatto che quando si seleziona un messaggio si possa espandere il messaggio e poter inserire un livello di pericolosità con i dati sotto
     if selected_collection:
         df = load_data(client, db_name, selected_collection)
 
@@ -101,35 +221,33 @@ def telegram_dashboard():
                         st.success("Modifiche salvate con successo!")
                         st.query_params.update(st.query_params)
 
-            ## Tabella dei messaggi revisionati
-            revisionati = df[df.get("revisioned", "no") == "yes"]
-            if not revisionati.empty:
-                st.subheader("Messaggi revisionati")
-                st.dataframe(revisionati[["message", "danger_level", "user_comment"]])
-
-                # Modifica feedback
-                revisionati["selezione"] = revisionati["message"] + " (ID: " + revisionati["_id"] + ")"
-                selected_revised = st.selectbox(
-                    "Seleziona un messaggio revisionato per cambiare feedback",
-                    revisionati["selezione"]
-                )
-                if selected_revised:
-                    record_id = selected_revised.split("ID: ")[-1].replace(")", "").strip()
-                    record = revisionati[revisionati["_id"] == record_id].iloc[0]
-                    st.write("**Contenuto del messaggio:**")
-                    st.write(record["message"])
-
-                    # Form per modificare feedback
-                    #nuovo_pericolosita = st.selectbox("Nuovo livello di pericolosità", ["Basso", "Medio", "Alto"])
-                    nuovo_pericolosita = st.slider("Pericolosità (0-10)", 0, 10, int(pericolosita), key="slider_modifica_feedback")
-                    comment = st.text_area("Motivo del cambiamento")
-                    revised_by = st.text_input("Revisionato da (nome utente)", "", key="modifica_feedback")
-                    if st.button("Aggiorna feedback"):
-                        collection = client[db_name][selected_collection]
-                        update_record(record["_id"], nuovo_pericolosita, comment, revised_by, collection)
-                        st.success("Feedback aggiornato con successo!")
-                        #st.query_params.update(st.query_params)
-                        st.session_state["rerun"] = True
-                        st.stop()
-            else:
-                st.info("Nessun messaggio revisionato.")
+    ## Tabella dei messaggi revisionati
+    revisionati = df[df.get("revisioned", "no") == "yes"]
+    if not revisionati.empty:
+        st.subheader("Messaggi revisionati")
+        st.dataframe(revisionati[["message", "danger_level", "user_comment"]])
+        # Modifica feedback
+        revisionati["selezione"] = revisionati["message"] + " (ID: " + revisionati["_id"] + ")"
+        selected_revised = st.selectbox(
+            "Seleziona un messaggio revisionato per cambiare feedback",
+            revisionati["selezione"]
+        )
+        if selected_revised:
+            record_id = selected_revised.split("ID: ")[-1].replace(")", "").strip()
+            record = revisionati[revisionati["_id"] == record_id].iloc[0]
+            st.write("**Contenuto del messaggio:**")
+            st.write(record["message"])
+            # Form per modificare feedback
+            #nuovo_pericolosita = st.selectbox("Nuovo livello di pericolosità", ["Basso", "Medio", "Alto"])
+            nuovo_pericolosita = st.slider("Pericolosità (0-10)", 0, 10, int(pericolosita), key="slider_modifica_feedback")
+            comment = st.text_area("Motivo del cambiamento")
+            revised_by = st.text_input("Revisionato da (nome utente)", "", key="modifica_feedback")
+            if st.button("Aggiorna feedback"):
+                collection = client[db_name][selected_collection]
+                update_record(record["_id"], nuovo_pericolosita, comment, revised_by, collection)
+                st.success("Feedback aggiornato con successo!")
+                #st.query_params.update(st.query_params)
+                st.session_state["rerun"] = True
+                st.stop()
+    else:
+        st.info("Nessun messaggio revisionato.")

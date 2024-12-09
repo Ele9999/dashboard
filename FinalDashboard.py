@@ -9,8 +9,8 @@ if "logged_in" not in st.session_state:
 def login():
     st.title("Gestione Dati MongoDB")
 
-    st.snow()
-    st.balloons()
+    #st.snow()
+    #st.balloons()
 
     st.markdown("""
     ## Benvenuto nella dashboard di gestione MongoDB!
