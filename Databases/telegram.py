@@ -4,7 +4,7 @@ from pymongo import MongoClient
 from bson.objectid import ObjectId
 import math
 from datetime import datetime, timedelta
-from st_aggrid import AgGrid, GridOptionsBuilder
+#from st_aggrid import AgGrid, GridOptionsBuilder
 
 if "rerun" in st.session_state and st.session_state["rerun"]:
     st.session_state["rerun"] = False
@@ -125,8 +125,15 @@ def telegram_dashboard():
         "revised_by": 1,  
         "revisioned": 1,
         "user_comment": 1,
-        "date": 1
-        #inserire autore quando ci sarà
+        "date": 1,
+        "sender_name": 1,
+        "sender_username": 1
+    }
+
+    fields_user_to_include = {
+        "sender_name": 1,
+        "sender_username": 1,
+        "danger_level": 1
     }
 
     with col1:
@@ -172,7 +179,26 @@ def telegram_dashboard():
 
 
     with col2:
-        st.write("utenti attivi")
+        if selected_collection:
+            st.subheader(f"Utenti attivi: {selected_collection}")
+            df = show_messages_from_collection(client, db_name, selected_collection, fields_user_to_include) #Non si vede il livello di perciolosità al momento
+
+            if not df.empty:
+                # Visualizza una lista dei campi disponibili nel DataFrame
+                available_columns = list(df.columns)
+                selected_fields = st.multiselect("Seleziona i campi da mostrare:", available_columns, default=available_columns)
+
+                # Filtra il DataFrame per mostrare solo i campi selezionati
+                filtered_df = df[selected_fields] if selected_fields else df
+
+#####Impostare la tabella in ordine di pericolosità degli utenti (dal livello più alto al più basso)
+#####Se è una collezione vedere solo la scritta "questa è una collezione non ci sono utenti attivi"
+
+                # Mostra la tabella con i campi selezionati
+                st.dataframe(filtered_df)
+
+        else:
+            st.info("Nessun utente trovato nella collezione selezionata.")
 #################SECONDA SEZIONE DASHBOARD
 
 #################TERZA SEZIONE DASHBOARD (Feedback e pericolosità)
