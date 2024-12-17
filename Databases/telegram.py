@@ -6,6 +6,8 @@ import math
 from datetime import datetime, timedelta
 #from st_aggrid import AgGrid, GridOptionsBuilder
 
+st.set_page_config(layout="wide")
+
 if "rerun" in st.session_state and st.session_state["rerun"]:
     st.session_state["rerun"] = False
     st.experimental_rerun()
@@ -65,6 +67,34 @@ def show_messages_from_collection(client, db_name, collection_name, fields_to_in
     # Ritorna il DataFrame
     return df
 
+def classify_collections(client, db_name):
+    db = client[db_name]  # Connetti al database
+    collections = db.list_collection_names()  # Ottieni tutte le collezioni
+
+    num_groups = 0
+    num_channels = 0
+
+    # Itera su ciascuna collezione
+    for collection_name in collections:
+        collection = db[collection_name]
+        # Verifica se almeno un documento ha il campo "user"
+        has_user = collection.count_documents({"sender_username": {"$exists": True}}, limit=1) > 0
+
+        if has_user:
+            num_groups += 1  # Se esiste almeno un campo "user", è un gruppo
+        else:
+            num_channels += 1  # Altrimenti è un canale
+
+    return num_groups, num_channels
+
+def get_active_users(collection):
+    """
+    Recupera gli utenti attivi con campi 'name', 'username' e 'danger_level'.
+    """
+    query = {"sender_username": {"$exists": True}}  # Solo documenti che contengono 'user'
+    projection = {"_id": 0, "sender_username": 1, "sender_name": 1, "danger_level": 1}
+    return list(collection.find(query, projection))
+
 
 # Dashboard principale
 def telegram_dashboard():
@@ -82,7 +112,9 @@ def telegram_dashboard():
     num_group = len(collections)
     num_channel = len(collections)
 
-    #numero di messaggi nuovi per collezione
+    num_groups, num_channels = classify_collections(client, db_name)
+
+    #numero di messaggi nuovi per collezione #DA RIVEDERE
     start_of_today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
     num_messages_today = 0
     for col_name in selected_collection: #conta i nuovi messaggi dalla collezione selezionata (modificare con "collections" nel caso di una unica)
@@ -93,14 +125,14 @@ def telegram_dashboard():
     
     with col1:
         st.markdown(
-            f"<h1 style='text-align: center; color: #4CAF50;'>{num_group}</h1>"
+            f"<h1 style='text-align: center; color: #4CAF50;'>{num_groups}</h1>"
             f"<h4 style='text-align: center;'>Gruppi monitorati</h4>",
             unsafe_allow_html=True
     )
 
     with col2:
         st.markdown(
-            f"<h1 style='text-align: center; color: #2196F3;'>{num_channel}</h1>"
+            f"<h1 style='text-align: center; color: #2196F3;'>{num_channels}</h1>"
             f"<h4 style='text-align: center;'>Canali monitorati</h4>",
             unsafe_allow_html=True
         )
@@ -114,6 +146,7 @@ def telegram_dashboard():
 #################PRIMA SEZIONE DASHBOARD
 
 #################SECONDA SEZIONE DASHBOARD
+    #col1, col2 = st.column_config.Column(width="large")
     col1, col2 = st.columns(2)
     #selected_collection = st.selectbox("Seleziona una collezione", collections) #scommentare se si vuole sotto a "statistiche" questa scelta
 
