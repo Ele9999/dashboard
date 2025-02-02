@@ -3,6 +3,7 @@ import pandas as pd
 from pymongo import MongoClient
 from bson.objectid import ObjectId
 import math
+from datetime import datetime, timedelta
 
 if "rerun" in st.session_state and st.session_state["rerun"]:
     st.session_state["rerun"] = False
@@ -45,6 +46,239 @@ def update_record(record_id, pericolosita, comment, revised_by, collection):
         }
     )
 
+def show_messages_from_collection(client, db_name, collection_name, fields_to_include):
+    # Ottieni la collezione specifica
+    collection = client[db_name][collection_name]
+    
+    # Ottieni i messaggi dalla collezione con solo i campi richiesti
+    cursor = collection.find({}, fields_to_include)  # Proiezione dei campi
+    messages = list(cursor)  # Converte il cursore in una lista
+    
+    # Rimuove il campo _id o lo trasforma in stringa per compatibilità con Pandas
+    for message in messages:
+        message["_id"] = str(message["_id"])  # Converte l'_id in stringa
+    
+    # Converte in DataFrame di Pandas
+    df = pd.DataFrame(messages)
+    
+    # Ritorna il DataFrame
+    return df
+
+def classify_collections(client, db_name):
+    db = client[db_name]  # Connetti al database
+    collections = db.list_collection_names()  # Ottieni tutte le collezioni
+
+    num_groups = 0
+    num_channels = 0
+
+    # Itera su ciascuna collezione
+    for collection_name in collections:
+        collection = db[collection_name]
+        # Verifica se almeno un documento ha il campo "user"
+        has_user = collection.count_documents({"tag_username": {"$exists": True}}, limit=1) > 0
+
+        if has_user:
+            num_groups += 1  # Se esiste almeno un campo "tag_username", è un gruppo
+        else:
+            num_channels += 1  # Altrimenti è un canale
+
+    return num_groups, num_channels
+
+def get_active_users(collection):
+    """
+    Recupera gli utenti attivi con campi 'username', 'tag_username' e 'danger_level'.
+    """
+    query = {"tag_username": {"$exists": True}}  # Solo documenti che contengono 'user'
+    projection = {"_id": 0, "tag_username": 1, "username": 1, "danger_level": 1}
+    return list(collection.find(query, projection))
+
+def show_all_collections_data(client, db_name, fields_to_include):
+    """
+    Unisce i dati da tutte le collezioni in un unico DataFrame.
+    Gestisce i campi mancanti impostando valori di default.
+    """
+    db = client[db_name]
+    collections = db.list_collection_names()
+    combined_data = []
+
+    for collection_name in collections:
+        collection = db[collection_name]
+        data = list(collection.find({}, {field: 1 for field in fields_to_include}))
+        for doc in data:
+            # Assicura che tutti i campi siano presenti
+            for field in fields_to_include:
+                doc.setdefault(field, "")  # Imposta "" come valore predefinito per campi mancanti
+            doc['collection_name'] = collection_name  # Aggiungi il nome della collezione
+        combined_data.extend(data)
+
+    return pd.DataFrame(combined_data)
+
+##Utenti attivi
+def get_group_user_messages(client, db_name):
+    """
+    Ottiene tutti i messaggi per i gruppi con l'informazione di chi ha inviato cosa e in quale gruppo.
+    """
+    db = client[db_name]
+    collections = db.list_collection_names()
+    group_data = []
+
+    for collection_name in collections:
+        collection = db[collection_name]
+        # Verifica se è un gruppo (contiene "tag_username")
+        is_group = collection.count_documents({"tag_username": {"$exists": True}}, limit=1) > 0
+
+        if is_group:
+            messages = collection.find({}, {"username": 1, "tag_username": 1, "content": 1})
+            for msg in messages:
+                group_data.append({
+                    "group_name": collection_name,
+                    "username": msg.get("username", "Sconosciuto"),
+                    "tag_username": msg.get("tag_username", "Sconosciuto"),
+                    "content": msg.get("content", "Nessun messaggio")
+                })
+    return pd.DataFrame(group_data)
+
+
+def get_channel_messages(client, db_name):
+    """
+    Ottiene tutti i messaggi per i canali con il loro contenuto.
+    """
+    db = client[db_name]
+    collections = db.list_collection_names()
+    channel_data = []
+
+    for collection_name in collections:
+        collection = db[collection_name]
+        # Verifica se è un canale (non contiene "tag_username")
+        is_channel = collection.count_documents({"tag_username": {"$exists": False}}, limit=1) > 0
+
+        if is_channel:
+            messages = collection.find({}, {"content": 1})
+            for msg in messages:
+                channel_data.append({
+                    "channel_name": collection_name,
+                    "content": msg.get("content", "Nessun messaggio")
+                })
+    return pd.DataFrame(channel_data)
+
+
+def get_group_user_messages_for_collection(collection):
+    """
+    Ottiene messaggi per una collezione gruppo.
+    """
+    messages = collection.find({}, {"username": 1, "tag_username": 1, "content": 1})
+    group_data = []
+    for msg in messages:
+        group_data.append({
+            "username": msg.get("username", "Sconosciuto"),
+            "tag_username": msg.get("tag_username", "Sconosciuto"),
+            "content": msg.get("content", "Nessun messaggio")
+        })
+    return pd.DataFrame(group_data)
+
+
+def get_most_dangerous_messages_for_channel(collection):
+    """
+    Ottiene i messaggi più pericolosi per un canale, ordinati per 'danger_level'.
+    """
+    messages = collection.find({}, {"content": 1, "danger_level": 1}).sort("danger_level", -1)
+    channel_data = []
+    for msg in messages:
+        channel_data.append({
+            "content": msg.get("content", "Nessun messaggio"),
+            "danger_level": msg.get("danger_level", 0)
+        })
+    return pd.DataFrame(channel_data)
+
+def get_data_across_all_collections(client, db_name, data_type):
+    """Recupera dati aggregati da tutte le collezioni per gruppi/canali."""
+    db = client[db_name]
+    collections = db.list_collection_names()
+    combined_data = []
+
+    for collection_name in collections:
+        collection = db[collection_name]
+
+        if data_type == 'dangerous_messages':
+            messages = collection.find({}, {"content": 1, "danger_level": 1}).sort("danger_level", -1)
+            for msg in messages:
+                combined_data.append({
+                    "content": msg.get("content", "Nessun messaggio"),
+                    "danger_level": msg.get("danger_level", 0),
+                    "collection_name": collection_name
+                })
+
+        elif data_type == 'active_users':
+            is_group = collection.count_documents({"tag_username": {"$exists": True}}, limit=1) > 0
+            if is_group:
+                messages = collection.find({}, {"username": 1, "tag_username": 1, "content": 1})
+                for msg in messages:
+                    combined_data.append({
+                        "username": msg.get("username", "Sconosciuto"),
+                        "tag_username": msg.get("tag_username", "Sconosciuto"),
+                        "content": msg.get("content", "Nessun messaggio"),
+                        "group_name": collection_name
+                    })
+
+        elif data_type == 'user_activity':
+            user_activity = collection.aggregate([
+                {"$group": {"_id": "$tag_username", "count": {"$sum": 1}}},
+                {"$sort": {"count": -1}}
+            ])
+            for activity in user_activity:
+                combined_data.append({
+                    "username": activity["_id"],
+                    "message_count": activity["count"],
+                    "collection_name": collection_name
+                })
+
+    return pd.DataFrame(combined_data)
+
+def show_data_for_selected_collection(selected_collection, client, db_name):
+    """Mostra i dati in base alla selezione (Tutte le collezioni o singola collezione)."""
+    db = client[db_name]
+
+    if selected_collection == "Tutte le collezioni":
+        st.subheader("📊 Dati di tutte le collezioni")
+
+        # Messaggi più pericolosi tra tutti i gruppi/canali
+        dangerous_messages_df = get_data_across_all_collections(client, db_name, 'dangerous_messages')
+        if not dangerous_messages_df.empty:
+            st.subheader("🔥 Messaggi più pericolosi")
+            st.dataframe(dangerous_messages_df.rename(columns={"collection_name": "Gruppo/Canale"}))
+        else:
+            st.info("Nessun messaggio pericoloso trovato.")
+
+        # Utenti attivi nei gruppi
+        active_users_df = get_data_across_all_collections(client, db_name, 'active_users')
+        if not active_users_df.empty:
+            st.subheader("👥 Utenti attivi nei gruppi")
+            st.dataframe(active_users_df.rename(columns={"group_name": "Gruppo"}))
+        else:
+            st.info("Nessun utente attivo trovato nei gruppi.")
+
+        # Utenti più attivi
+        user_activity_df = get_data_across_all_collections(client, db_name, 'user_activity')
+        if not user_activity_df.empty:
+            st.subheader("📈 Utenti più attivi")
+            st.dataframe(user_activity_df.rename(columns={"collection_name": "Gruppo/Canale"}))
+        else:
+            st.info("Nessun dato sugli utenti più attivi.")
+
+    else:
+        st.subheader(f"📊 Dati della collezione: {selected_collection}")
+
+        # Messaggi più pericolosi
+        st.subheader("⚠️ Messaggi più pericolosi")
+        dangerous_messages = get_data_across_all_collections(client, db_name, 'dangerous_messages')
+        dangerous_messages = dangerous_messages[dangerous_messages["collection_name"] == selected_collection]
+
+        if not dangerous_messages.empty:
+            st.dataframe(dangerous_messages.rename(columns={"content": "Messaggio", "danger_level": "Livello di Pericolosità"}))
+        else:
+            st.info("Nessun messaggio pericoloso trovato in questa collezione.")
+
+
 # Dashboard principale
 def twitter_dashboard():
     st.title("Twitter Scraping Dashboard")
@@ -53,10 +287,166 @@ def twitter_dashboard():
     client = connect_to_mongo()
     db_name = 'twitter_scraping'
 
-    # Ottieni le collezioni disponibili
-    collections = get_collections(client, db_name)
-    selected_collection = st.selectbox("Seleziona una collezione", collections)
+    db = client[db_name]
+    collections = db.list_collection_names()
+    collections_with_all = ["Tutte le collezioni"] + collections
+    # Seleziona la collezione da analizzare
+    selected_collection = st.selectbox("Seleziona una collezione", collections_with_all)
 
+    num_groups, num_channels = classify_collections(client, db_name)
+
+    #TODO numero di messaggi nuovi per collezione #DA RIVEDERE
+    start_of_today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    num_messages_today = 0
+    for col_name in selected_collection: #conta i nuovi messaggi dalla collezione selezionata (modificare con "collections" nel caso di una unica)
+        collection = client[db_name][col_name]
+        num_messages_today += collection.count_documents({"timestamp": {"$gte": start_of_today}})
+
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.markdown(
+            f"<h1 style='text-align: center; color: #4CAF50;'>{num_groups}</h1>"
+            f"<h4 style='text-align: center;'>Gruppi monitorati</h4>",
+            unsafe_allow_html=True
+    )
+
+    with col2:
+        st.markdown(
+            f"<h1 style='text-align: center; color: #2196F3;'>{num_channels}</h1>"
+            f"<h4 style='text-align: center;'>Canali monitorati</h4>",
+            unsafe_allow_html=True
+        )
+
+    with col3:
+        st.markdown(
+            f"<h1 style='text-align: center; color: #FF5722;'>{num_messages_today}</h1>"
+            f"<h4 style='text-align: center;'>Nuovi messaggi oggi</h4>",
+            unsafe_allow_html=True
+        )
+#################PRIMA SEZIONE DASHBOARD
+
+#################SECONDA SEZIONE DASHBOARD
+    #col1, col2 = st.column_config.Column(width="large")
+    col1, col2 = st.columns(2)
+    #selected_collection = st.selectbox("Seleziona una collezione", collections) #scommentare se si vuole sotto a "statistiche" questa scelta
+
+    # Definisci i campi che vuoi visualizzare
+    fields_to_include = {
+        "id": 1,  
+        "content": 1,  
+        "danger_level": 1,  
+        "revised_by": 1,  
+        "revisioned": 1,
+        "user_comment": 1,
+        "revisioned_at": 1
+    }
+
+    #fields_user_to_include = {
+    #    "username": 1,
+    #    "tag_username": 1,
+    #    "danger_level": 1
+    #}
+
+    with col1:
+        if selected_collection:
+            st.subheader(f"Dati della collezione: {selected_collection}")
+        
+            if selected_collection == "Tutte le collezioni":
+                st.subheader("Dati di tutte le collezioni")
+                df = show_all_collections_data(client, db_name, fields_to_include)
+            else:
+                collection = db[selected_collection]
+                data = list(collection.find({}, {field: 1 for field in fields_to_include}))
+                for doc in data:
+                    for field in fields_to_include:
+                        doc.setdefault(field, "")
+                df = pd.DataFrame(data)
+        
+            if not df.empty:
+                # Visualizza una lista dei campi disponibili nel DataFrame
+                available_columns = list(df.columns)
+                selected_fields = st.multiselect("Seleziona i campi da mostrare:", available_columns, default=available_columns)
+        
+                # Filtra il DataFrame per mostrare solo i campi selezionati
+                filtered_df = df[selected_fields] if selected_fields else df
+        
+                # Mostra la tabella con i campi selezionati
+                st.dataframe(filtered_df)
+        
+                # Seleziona una riga dalla tabella usando il messaggio come opzione visibile
+                selected_index = None
+                if 'content' in filtered_df.columns:  # Verifica che la colonna 'message' esista
+                    selected_index = st.selectbox(
+                        "Seleziona una riga per vedere i dettagli",
+                        options=[None] + list(filtered_df.index),  # Aggiungi l'opzione None
+                        format_func=lambda idx: filtered_df.loc[idx, 'content'] if idx is not None else "Nessuna selezione"
+                    )
+                else:
+                    selected_index = st.selectbox(
+                        "Seleziona una riga per vedere i dettagli",
+                        options=[None] + list(filtered_df.index),  # Aggiungi l'opzione None
+                        format_func=lambda idx: f"Riga {idx}" if idx is not None else "Nessuna selezione"
+                    )
+        
+                # Mostra i dettagli solo se una riga è stata selezionata
+                if selected_index is not None:
+                    # Mostra i dettagli della riga selezionata
+                    selected_message = df.loc[selected_index]
+                    st.subheader("**Dettagli del Messaggio**")
+                    for field in available_columns:  # Mostra tutti i campi nella riga selezionata
+                        st.write(f"- **{field.capitalize()}**: {selected_message[field]}")
+            else:
+                st.info("Nessun messaggio trovato nella collezione selezionata.")
+
+    with col2:
+        # Dashboard: Utenti Attivi --> cambiare scritta nel caso in cui sia una collezione e non un gruppo in "pericolosità messaggi"
+        if selected_collection:
+            st.subheader(f"Utenti Attivi: {selected_collection}")
+
+            if selected_collection == "Tutte le collezioni":
+                # Per gruppi
+                group_user_messages = get_group_user_messages(client, db_name)
+                if not group_user_messages.empty:
+                    st.subheader("Messaggi nei gruppi")
+                    st.dataframe(group_user_messages.rename(
+                        columns={"content": "Messaggio", "group_name": "Gruppo"}
+                    ))
+
+                # Per canali
+                channel_messages = get_channel_messages(client, db_name)
+                if not channel_messages.empty:
+                    st.subheader("Messaggi nei canali")
+                    st.dataframe(channel_messages.rename(
+                        columns={"content": "Messaggio", "channel_name": "Canale"}
+                    ))
+            else:
+                collection = db[selected_collection]
+                # Verifica se è un gruppo o un canale
+                is_group = collection.count_documents({"tag_username": {"$exists": True}}, limit=1) > 0
+
+                if is_group:
+                    # Mostra messaggi nei gruppi
+                    group_messages = get_group_user_messages_for_collection(collection)
+                    if not group_messages.empty:
+                        st.dataframe(group_messages.rename(
+                            columns={"username": "Utente", "content": "Messaggio"}
+                        ))
+                    else:
+                        st.info("Nessun messaggio trovato per questo gruppo.")
+                else:
+                    # Mostra messaggi più pericolosi nei canali
+                    dangerous_messages = get_most_dangerous_messages_for_channel(collection)
+                    if not dangerous_messages.empty:
+                        st.dataframe(dangerous_messages.rename(
+                            columns={"content": "Messaggio", "danger_level": "Livello di Pericolosità"}
+                        ))
+                    else:
+                        st.info("Nessun messaggio trovato per questo canale.")
+#################SECONDA SEZIONE DASHBOARD
+
+#################TERZA SEZIONE DASHBOARD (Feedback e pericolosità)
+    ####Impostare il fatto che quando si seleziona un messaggio si possa espandere il messaggio e poter inserire un livello di pericolosità con i dati sotto
     if selected_collection:
         df = load_data(client, db_name, selected_collection)
 
@@ -67,7 +457,7 @@ def twitter_dashboard():
                 st.dataframe(df)
 
             #seleziona un record
-            selected_index = st.selectbox("Seleiona un record", df.index)
+            selected_index = st.selectbox("Seleziona un record", df.index)
 
             if selected_index is not None:
                 # Mostra il record selezionato
@@ -101,35 +491,48 @@ def twitter_dashboard():
                         st.success("Modifiche salvate con successo!")
                         st.query_params.update(st.query_params)
 
-            ## Tabella dei messaggi revisionati
-            revisionati = df[df.get("revisioned", "no") == "yes"]
-            if not revisionati.empty:
-                st.subheader("Messaggi revisionati")
-                st.dataframe(revisionati[["content", "danger_level", "user_comment"]])
+    ##Tabella dei messaggi revisionati
+    # Verifica se la colonna "revisioned" esiste nel DataFrame
+    if "revisioned" in df.columns:
+        revisionati = df[df["revisioned"] == "yes"]  # Filtra i messaggi revisionati
+    else:
+        revisionati = pd.DataFrame()  # Crea un DataFrame vuoto se la colonna non esiste
 
-                # Modifica feedback
-                revisionati["selezione"] = revisionati["content"] + " (ID: " + revisionati["_id"] + ")"
-                selected_revised = st.selectbox(
-                    "Seleziona un messaggio revisionato per cambiare feedback",
-                    revisionati["selezione"]
-                )
-                if selected_revised:
-                    record_id = selected_revised.split("ID: ")[-1].replace(")", "").strip()
-                    record = revisionati[revisionati["_id"] == record_id].iloc[0]
-                    st.write("**Contenuto del messaggio:**")
-                    st.write(record["content"])
+    # Mostra i messaggi revisionati solo se ci sono dati
+    if not revisionati.empty:
+        st.subheader("Messaggi revisionati")
+        st.dataframe(revisionati[["content", "danger_level", "user_comment"]])
 
-                    # Form per modificare feedback
-                    #nuovo_pericolosita = st.selectbox("Nuovo livello di pericolosità", ["Basso", "Medio", "Alto"])
-                    nuovo_pericolosita = st.slider("Pericolosità (0-10)", 0, 10, int(pericolosita), key="slider_modifica_feedback")
-                    comment = st.text_area("Motivo del cambiamento")
-                    revised_by = st.text_input("Revisionato da (nome utente)", "", key="modifica_feedback")
-                    if st.button("Aggiorna feedback"):
-                        collection = client[db_name][selected_collection]
-                        update_record(record["_id"], nuovo_pericolosita, comment, revised_by, collection)
-                        st.success("Feedback aggiornato con successo!")
-                        #st.query_params.update(st.query_params)
-                        st.session_state["rerun"] = True
-                        st.stop()
-            else:
-                st.info("Nessun messaggio revisionato.")
+        # Modifica feedback
+        revisionati["selezione"] = revisionati["content"] + " (ID: " + revisionati["_id"] + ")"
+        selected_revised = st.selectbox(
+            "Seleziona un messaggio revisionato per cambiare feedback",
+            revisionati["selezione"]
+        )
+        if selected_revised:
+            record_id = selected_revised.split("ID: ")[-1].replace(")", "").strip()
+            record = revisionati[revisionati["_id"] == record_id].iloc[0]
+            st.write("**Contenuto del messaggio:**")
+            st.write(record["content"])
+
+            # Form per modificare feedback
+            nuovo_pericolosita = st.slider(
+                "Pericolosità (0-10)",
+                0,
+                10,
+                int(record["danger_level"]) if "danger_level" in record else 5,
+                key="slider_modifica_feedback"
+            )
+            comment = st.text_area("Motivo del cambiamento")
+            revised_by = st.text_input("Revisionato da (nome utente)", "", key="modifica_feedback")
+            if st.button("Aggiorna feedback"):
+                collection = client[db_name][selected_collection]
+                update_record(record["_id"], nuovo_pericolosita, comment, revised_by, collection)
+                st.success("Feedback aggiornato con successo!")
+                st.session_state["rerun"] = True
+                st.stop()
+    else:
+        st.info("Nessun messaggio revisionato.")
+
+#####QUARTA SEZIONE DASHBOARD
+    show_data_for_selected_collection(selected_collection, client, db_name)

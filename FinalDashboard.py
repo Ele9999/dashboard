@@ -2,7 +2,10 @@ import streamlit as st
 from Databases.ahmia import ahmia_dashboard
 from Databases.telegram import telegram_dashboard
 from Databases.twitter import twitter_dashboard
-
+from Analytics.telegram_analytics import telegram_analytics_section
+from Analytics.ahmia_analytics import ahmia_analytics_section
+from Analytics.twitter_analytics import twitter_analytics_section
+from QuestionsToDB.telegram_info import chat_info_telegram
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 
@@ -35,19 +38,22 @@ ahmia = st.Page(ahmia_dashboard, title="Ahmia Scraping", icon=":material/databas
 telegram = st.Page(telegram_dashboard, title="Telegram Scraping", icon=":material/database:")
 twitter = st.Page(twitter_dashboard, title="Twitter Scraping", icon=":material/database:")
 
-analytics = st.Page("Analytics/TraceUsers.py", title="Analytics", icon=":material/bug_report:")
+telegram_analytics = st.Page(telegram_analytics_section, title="Telegram Analytics", icon=":material/bug_report:")
+ahmia_analytics = st.Page(ahmia_analytics_section, title="Ahmia Analytics", icon=":material/bug_report:")
+twitter_analytics = st.Page(twitter_analytics_section, title="Twitter Analytics", icon=":material/bug_report:")
+
+question_to_db_telegram = st.Page(chat_info_telegram, title="Telegram: Question to DB", icon= ":material/manage_search:")
 
 ransomware= st.Page("RansomwareAndRansomfeed/ransomware.py", title="Ransomware", icon=":material/notification_important:")
-ransomfeed= st.Page("RansomwareAndRansomfeed/ransomfeed.py", title="Ransomfeed", icon=":material/notification_important:")
-
 
 if st.session_state.logged_in:
     pg = st.navigation(
         {
             "Homepage": [home],
             "Databases": [ahmia, telegram, twitter],
-            "Analytics": [analytics],
-            "RansomwareAndRamsonfeed": [ransomware, ransomfeed],
+            "Analytics": [telegram_analytics, ahmia_analytics, twitter_analytics],
+            "Question to DB": [question_to_db_telegram],
+            "RansomwareAndRamsonfeed": [ransomware],
         }
     )
 else:
