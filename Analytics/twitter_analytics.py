@@ -2,9 +2,7 @@ import streamlit as st
 import pandas as pd
 from pymongo import MongoClient
 from bson.objectid import ObjectId
-import math
 from datetime import datetime, timedelta
-#from st_aggrid import AgGrid, GridOptionsBuilder
 import plotly.express as px
 from Databases.twitter import get_data_across_all_collections, connect_to_mongo
 from st_link_analysis import st_link_analysis, NodeStyle, EdgeStyle
@@ -139,8 +137,12 @@ def twitter_analytics_section():
 
     # Selezione della collezione
     selected_collection = st.selectbox("Seleziona una collezione per le analisi:", ["(Nessuna)"] + collections, key="collection_key")
-    # Selezione del periodo di tempo
-    time_filter = st.selectbox("Filtro tempo", ["Ultimi 7 giorni", "Ultimo mese", "Ultimi 3 mesi", "Tutto"], key="time_filter_key")
+    # Selezione periodo
+    time_filter = st.selectbox(
+        "Filtro tempo",
+        ["Ultimi 7 giorni", "Ultimo mese", "Ultimi 3 mesi", "Tutto"],
+        key="time_filter_key"
+    )
     date_filter = {
         "Ultimi 7 giorni": datetime.now() - timedelta(days=7),
         "Ultimo mese": datetime.now() - timedelta(days=30),
@@ -157,7 +159,7 @@ def twitter_analytics_section():
     # Esempio di query per estrarre i dati
     query = {}
     if date_filter:
-        query["timestamp"] = {"$gte": date_filter}
+        query["date"] = {"$gte": date_filter}
     data = list(collection.find(query, {"content": 1, "danger_level": 1, "date": 1}))
     df = pd.DataFrame(data)
     
@@ -170,94 +172,164 @@ def twitter_analytics_section():
         df["date"] = pd.to_datetime(df["date"])
 
     # Grafico 1: numero messaggi nel tempo
-    if "date" in df.columns:
-        st.subheader("📅 Numero di messaggi nel tempo")
-        df_counts = df.resample("D", on="date").count()
-        #fig1 = px.line(df_counts, x=df_counts.index, y="message", labels={"message": "Numero di messaggi"})
-        #st.plotly_chart(fig1)
+    st.subheader("📅 Numero di messaggi nel tempo")
+    tab_chart_1, tab_data_1 = st.tabs(["Chart", "Data"])
+    with tab_chart_1:
 
-        fig1 = px.line(df_counts, x=df_counts.index, y="content", 
-               labels={"content": "Numero di messaggi"}, 
-               render_mode="svg")  # Forza SVG
-        st.plotly_chart(fig1)
+        if "date" in df.columns:
+            st.subheader("📅 Numero di messaggi nel tempo")
+            df_counts = df.resample("D", on="date").count()
+            #fig1 = px.line(df_counts, x=df_counts.index, y="message", labels={"message": "Numero di messaggi"})
+            #st.plotly_chart(fig1)
 
+            fig1 = px.line(df_counts, x=df_counts.index, y="content", 
+                   labels={"content": "Numero di messaggi"}, 
+                   render_mode="svg")  # Forza SVG
+            st.plotly_chart(fig1)
+
+    with tab_data_1:
+        st.subheader("Tabella ultimi messaggi")
+        df_sorted = df.sort_values(by="date", ascending=False)
+        st.dataframe(df_sorted.head(10)) 
 
     # **Grafico 2: Distribuzione della pericolosità**
     st.subheader("⚠️ Distribuzione della pericolosità")
-    if "danger_level" in df.columns:
-        fig2 = px.histogram(df, x="danger_level", nbins=10, labels={"danger_level": "Livello di Pericolosità"})
-        st.plotly_chart(fig2)
-    else:
-        st.info("❌ Nessun livello di pericolosità assegnato ai messaggi")
+    tab_chart_2, tab_data_2 = st.tabs(["Chart", "Data"])
+    with tab_chart_2:
+        if "danger_level" in df.columns:
+            fig2 = px.histogram(df, x="danger_level", nbins=10, labels={"danger_level": "Livello di Pericolosità"})
+            st.plotly_chart(fig2)
+        else:
+            st.info("❌ Nessun livello di pericolosità assegnato ai messaggi")
+
+    with tab_data_2:
+        if "danger_level" in df.columns:
+            # Group by danger_level e contiamo quanti messaggi per livello
+            df_danger = df.groupby("danger_level").size().reset_index(name="count")
+            st.dataframe(df_danger)
+        else:
+            st.info("Nessun campo 'danger_level' nei documenti.")
 
     # Grafico 3: Frequenza parole chiave (se esiste la colonna "message")
-    if "content" in df.columns:
-        st.subheader("🔍 Frequenza Parole Chiave")
-        keywords = ["murder", "bomb", "hacking", "hate", "knife", "blood", "bad"]
-        word_counts = {k:0 for k in keywords}
+    st.subheader("🔍 Frequenza Parole Chiave")
+    tab_chart_3, tab_data_3 = st.tabs(["Chart", "Data"])
+    with tab_chart_3:
+        if "content" in df.columns:
+            keywords = ["murder", "bomb", "hacking", "hate", "knife", "blood", "bad"]
+            word_counts = {k:0 for k in keywords}
 
-        for msg in df["content"].dropna():
-            lower_msg = msg.lower()
-            for kw in keywords:
-                word_counts[kw] += lower_msg.count(kw)
+            for msg in df["content"].dropna():
+                lower_msg = msg.lower()
+                for kw in keywords:
+                    word_counts[kw] += lower_msg.count(kw)
 
-        keyword_df = pd.DataFrame(list(word_counts.items()), columns=["Parola", "Frequenza"])
-        if keyword_df["Frequenza"].sum() > 0:
-            fig4 = px.bar(keyword_df, x="Parola", y="Frequenza")
-            st.plotly_chart(fig4, use_container_width=True)
+            keyword_df = pd.DataFrame(list(word_counts.items()), columns=["Parola", "Frequenza"])
+            if keyword_df["Frequenza"].sum() > 0:
+                fig4 = px.bar(keyword_df, x="Parola", y="Frequenza")
+                st.plotly_chart(fig4, use_container_width=True)
+            else:
+                st.info("❌ Nessuna parola chiave trovata nei messaggi.")
+    with tab_data_3:
+        if "content" in df.columns:
+            keywords = ["murder", "bomb", "hacking", "hate", "knife", "blood", "bad"]
+            word_counts = {k: 0 for k in keywords}
+
+            for msg in df["content"].dropna():
+                lower_msg = msg.lower()
+                for kw in keywords:
+                    word_counts[kw] += lower_msg.count(kw)
+
+            keyword_df = pd.DataFrame(list(word_counts.items()), columns=["keyword", "frequency"])
+            st.dataframe(keyword_df)
         else:
-            st.info("❌ Nessuna parola chiave trovata nei messaggi.")
+            st.info("Nessuna colonna 'content' trovata.")
 
 
     #######################################################
     # Sezione GRAFO di interazioni
     #######################################################
-    st.title("📊 Tabella Utenti e Grafo")
-    st.header("Individuare un utente di interesse, scriverlo e premere il bottone")
-
-    # 1) Mostriamo tabella utenti
+    st.subheader("📊 Tabella utenti e grafo")
     users_data = get_users_table(collection)
-    if not users_data:
-        st.warning("Nessun utente trovato.")
-        return
-
-    df_users = pd.DataFrame(users_data)
-    st.subheader("Elenco utenti (ordinati per post)")
+    df_users = pd.DataFrame(users_data).rename(columns={
+        "id": "id",
+        "username": "Username",
+        "tag_username": "Tag Username",
+        "total_posts": "Total Posts"
+    })
     st.dataframe(df_users)
 
-    # 2) Input manuale: user digita un `username`
-    chosen_user = st.text_input("Scrivi il 'username' da analizzare (es. 'FAISAL ABBAS')", "")
+    
+    st.subheader("Scrivi un utente per visualizzare il grafo")
+    user_input = st.text_input("Inserisci username per vedere il grafo:", "")
 
-    # 3) Bottone
     if st.button("Mostra Grafo"):
-        if not chosen_user:
-            st.error("Inserisci un username valido!")
+        if not user_input:
+            st.error("Inserisci uno username valido!")
         else:
-            elements = build_subgraph_for_user(chosen_user, collection)
+            elements = build_subgraph_for_user(user_input, collection)
             if not elements["nodes"] and not elements["edges"]:
                 st.info("Nessun dato per questo utente (o limitato a 50).")
             else:
-                # Definiamo stili
+                st.subheader("Grafo di interazioni")
                 node_styles = [
                     NodeStyle("USER_MAIN", color="#FF0000", caption="name", icon="person"),
+                    NodeStyle("USER", color="#FF7F3E", caption="name", icon="person"),
                     NodeStyle("MESSAGE_MAIN", color="#3EB489", caption="content", icon="description"),
-                    NodeStyle("MESSAGE_RESHARED", color="#2A629A", caption="content", icon="description"),
+                    NodeStyle("MESSAGE_REPLY", color="#2A629A", caption="content", icon="description"),
                 ]
-                edge_styles = [
-                    EdgeStyle("*", caption="label", directed=True),
-                ]
-
-                layout = "circle"
+                edge_styles = [EdgeStyle("*", caption="label", directed=True)]
+                
+                layout = "cola"
                 selected_node = st_link_analysis(elements, layout, node_styles, edge_styles)
+                st.session_state["selected_graph_node"] = selected_node
 
-                # Mostriamo dettagli del nodo
-                if selected_node:
-                    st.markdown(f"### Dettagli: `{selected_node['name']}`")
-                    if "MESSAGE" in selected_node["label"]:
-                        st.write("**Contenuto**:", selected_node.get("content",""))
-                    else:
-                        st.write("**Utente**:", selected_node["name"])
-                        if "tag_username" in selected_node:
-                            st.write("tag_username:", selected_node["tag_username"])
-                        if "total_posts" in selected_node:
-                            st.write("Post pubblicati:", selected_node["total_posts"])
+    #st.title("📊 Tabella Utenti e Grafo")
+    #st.header("Individuare un utente di interesse, scriverlo e premere il bottone")
+#
+    ## 1) Mostriamo tabella utenti
+    #users_data = get_users_table(collection)
+    #if not users_data:
+    #    st.warning("Nessun utente trovato.")
+    #    return
+#
+    #df_users = pd.DataFrame(users_data)
+    #st.subheader("Elenco utenti (ordinati per post)")
+    #st.dataframe(df_users)
+#
+    ## 2) Input manuale: user digita un `username`
+    #chosen_user = st.text_input("Scrivi il 'username' da analizzare (es. 'FAISAL ABBAS')", "")
+#
+    ## 3) Bottone
+    #if st.button("Mostra Grafo"):
+    #    if not chosen_user:
+    #        st.error("Inserisci un username valido!")
+    #    else:
+    #        elements = build_subgraph_for_user(chosen_user, collection)
+    #        if not elements["nodes"] and not elements["edges"]:
+    #            st.info("Nessun dato per questo utente (o limitato a 50).")
+    #        else:
+    #            # Definiamo stili
+    #            node_styles = [
+    #                NodeStyle("USER_MAIN", color="#FF0000", caption="name", icon="person"),
+    #                NodeStyle("MESSAGE_MAIN", color="#3EB489", caption="content", icon="description"),
+    #                NodeStyle("MESSAGE_RESHARED", color="#2A629A", caption="content", icon="description"),
+    #            ]
+    #            edge_styles = [
+    #                EdgeStyle("*", caption="label", directed=True),
+    #            ]
+#
+    #            layout = "circle"
+    #            selected_node = st_link_analysis(elements, layout, node_styles, edge_styles)
+#
+    #            # Mostriamo dettagli del nodo
+    #            if selected_node:
+    #                st.markdown(f"### Dettagli: `{selected_node['name']}`")
+    #                if "MESSAGE" in selected_node["label"]:
+    #                    st.write("**Contenuto**:", selected_node.get("content",""))
+    #                else:
+    #                    st.write("**Utente**:", selected_node["name"])
+    #                    if "tag_username" in selected_node:
+    #                        st.write("tag_username:", selected_node["tag_username"])
+    #                    if "total_posts" in selected_node:
+    #                        st.write("Post pubblicati:", selected_node["total_posts"])
+#

@@ -3,7 +3,7 @@ import pandas as pd
 from pymongo import MongoClient
 from bson.objectid import ObjectId
 from datetime import datetime, timedelta
-from Databases.telegram import get_data_across_all_collections, connect_to_mongo
+#from Databases.telegram import get_data_across_all_collections, connect_to_mongo
 from st_link_analysis import st_link_analysis, NodeStyle, EdgeStyle
 import plotly.express as px
 import numpy as np
@@ -12,9 +12,17 @@ if "rerun" in st.session_state and st.session_state["rerun"]:
     st.session_state["rerun"] = False
     st.experimental_rerun()
 
-################################################
-# Calcola total_posts, total_replies, e "top_interactions"
-################################################
+# Connessione al client MongoDB
+@st.cache_resource
+def connect_to_mongo():
+    client = MongoClient('mongodb+srv://eleonorapapa:C6A62LvpNQBfTZ29@cluster0.p5axc.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0') 
+    return client
+
+# Funzione per ottenere le collezioni
+def get_collections(client, db_name):
+    db = client[db_name]
+    return db.list_collection_names()
+
 def get_users_table(collection):
     """
     Ritorna una lista di dict con:
@@ -253,6 +261,7 @@ def build_subgraph_for_user(user_id_str, collection):
         "edges": edges
     }
 
+
 def telegram_analytics_section():
     st.title("📊 Analytics - Telegram Dashboard")
 
@@ -380,7 +389,7 @@ def telegram_analytics_section():
     # -------------------------------------------------------
     # 4) Tabella elenco utenti
     # -------------------------------------------------------
-    st.subheader("📊 Tabella utenti e grafo")
+    st.subheader("4) Tabella utenti (da chi ha più post a chi ne ha meno)")
     users_data = get_users_table(collection)
     df_users = pd.DataFrame(users_data).rename(columns={
         "user_id": "UserID",
@@ -393,7 +402,7 @@ def telegram_analytics_section():
     st.dataframe(df_users)
 
     
-    st.subheader("Scrivi un utente per visualizzare il grafo")
+    st.subheader("5) Seleziona un utente per visualizzare il grafo")
     user_input = st.text_input("Inserisci user_id per vedere il grafo (es. 123456):", "")
 
     if st.button("Mostra Grafo"):

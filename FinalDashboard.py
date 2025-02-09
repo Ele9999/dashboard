@@ -6,6 +6,10 @@ from Analytics.telegram_analytics import telegram_analytics_section
 from Analytics.ahmia_analytics import ahmia_analytics_section
 from Analytics.twitter_analytics import twitter_analytics_section
 from QuestionsToDB.telegram_info import chat_info_telegram
+from QuestionsToDB.twitter_info import chat_info_twitter
+from QuestionsToDB.ahmia_info import chat_info_ahmia
+from RansomwareAndRansomfeed.ransomfeed import ransomfeed_dashboard
+
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 
@@ -43,8 +47,11 @@ ahmia_analytics = st.Page(ahmia_analytics_section, title="Ahmia Analytics", icon
 twitter_analytics = st.Page(twitter_analytics_section, title="Twitter Analytics", icon=":material/bug_report:")
 
 question_to_db_telegram = st.Page(chat_info_telegram, title="Telegram: Question to DB", icon= ":material/manage_search:")
+question_to_db_twitter = st.Page(chat_info_twitter, title="Twitter: Question to DB", icon= ":material/manage_search:")
+question_to_db_ahmia = st.Page(chat_info_ahmia, title="Ahmia: Question to DB", icon= ":material/manage_search:")
 
-ransomware= st.Page("RansomwareAndRansomfeed/ransomware.py", title="Ransomware", icon=":material/notification_important:")
+
+ransomfeed= st.Page(ransomfeed_dashboard, title="Ransomfeed", icon=":material/notification_important:")
 
 if st.session_state.logged_in:
     pg = st.navigation(
@@ -52,8 +59,8 @@ if st.session_state.logged_in:
             "Homepage": [home],
             "Databases": [ahmia, telegram, twitter],
             "Analytics": [telegram_analytics, ahmia_analytics, twitter_analytics],
-            "Question to DB": [question_to_db_telegram],
-            "RansomwareAndRamsonfeed": [ransomware],
+            "Question to DB": [question_to_db_telegram, question_to_db_twitter, question_to_db_ahmia],
+            "Ransomware And Ramsonfeed": [ransomfeed],
         }
     )
 else:

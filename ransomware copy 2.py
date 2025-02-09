@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from Databases.telegram import get_data_across_all_collections, connect_to_mongo
 from st_link_analysis import st_link_analysis, NodeStyle, EdgeStyle
 import plotly.express as px
+import numpy as np
 
 if "rerun" in st.session_state and st.session_state["rerun"]:
     st.session_state["rerun"] = False
@@ -218,7 +219,7 @@ def telegram_analytics_section():
     # Esempio di query per estrarre i dati
     query = {}
     if date_filter:
-        query["timestamp"] = {"$gte": date_filter}
+        query["date"] = {"$gte": date_filter}
     data = list(collection.find(query, {"message": 1, "danger_level": 1, "date": 1}))
     df = pd.DataFrame(data)
     
@@ -305,7 +306,8 @@ def telegram_analytics_section():
                     NodeStyle("MESSAGE_REPLY", color="#2A629A", caption="content", icon="description"),
                 ]
                 edge_styles = [EdgeStyle("*", caption="label", directed=True)]
-                layout = "circle"
+                
+                layout = "cola" #provare una struttura gerarchica
 
                 selected_node = st_link_analysis(elements, layout, node_styles, edge_styles)
                 if selected_node:

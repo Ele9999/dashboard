@@ -6,6 +6,8 @@ import math
 from datetime import datetime, timedelta
 #from st_aggrid import AgGrid, GridOptionsBuilder
 import plotly.express as px
+import os
+from dotenv import load_dotenv
 
 
 st.set_page_config(layout="wide")
@@ -15,9 +17,20 @@ if "rerun" in st.session_state and st.session_state["rerun"]:
     st.experimental_rerun()
 
 # Connessione al client MongoDB
-@st.cache_resource
+#@st.cache_resource
+#def connect_to_mongo():
+#    client = MongoClient('mongodb+srv://eleonorapapa:C6A62LvpNQBfTZ29@cluster0.p5axc.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0') 
+#    return client
+
+load_dotenv()
+
 def connect_to_mongo():
-    client = MongoClient('mongodb+srv://eleonorapapa:C6A62LvpNQBfTZ29@cluster0.p5axc.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0') 
+    mongo_uri = os.getenv("MONGO_URI")  # Prende la stringa di connessione
+    
+    if not mongo_uri:
+        raise ValueError("❌ Errore: MONGO_URI non trovato nel file .env")
+
+    client = MongoClient(mongo_uri)
     return client
 
 # Funzione per ottenere le collezioni
@@ -310,9 +323,20 @@ def telegram_dashboard():
     ##    num_messages_today += collection.count_documents({"timestamp": {"$gte": start_of_today}})
     start_of_today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
     num_messages_today = sum(
-        client[db_name][col].count_documents({"timestamp": {"$gte": start_of_today}})
+        client[db_name][col].count_documents({"date": {"$gte": start_of_today}})
         for col in collections
     )
+
+    #start_of_today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+#
+    #num_messages_today = 0
+    #for col in collections:
+    #    collection = client[db_name][col]
+    #    num_messages_today += collection.count_documents({
+    #        "date": {
+    #            "$gte": start_of_today
+    #        }
+    #    })
 
     col1, col2, col3 = st.columns(3)
     

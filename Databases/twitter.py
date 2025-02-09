@@ -4,15 +4,28 @@ from pymongo import MongoClient
 from bson.objectid import ObjectId
 import math
 from datetime import datetime, timedelta
+import os
+from dotenv import load_dotenv
 
 if "rerun" in st.session_state and st.session_state["rerun"]:
     st.session_state["rerun"] = False
     st.experimental_rerun()
 
-# Connessione al client MongoDB
-@st.cache_resource
+## Connessione al client MongoDB
+#@st.cache_resource
+#def connect_to_mongo():
+#    client = MongoClient('mongodb+srv://eleonorapapa:C6A62LvpNQBfTZ29@cluster0.p5axc.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0')  # Inserisci la tua connection string
+#    return client
+
+load_dotenv()
+
 def connect_to_mongo():
-    client = MongoClient('mongodb+srv://eleonorapapa:C6A62LvpNQBfTZ29@cluster0.p5axc.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0')  # Inserisci la tua connection string
+    mongo_uri = os.getenv("MONGO_URI")  # Prende la stringa di connessione
+    
+    if not mongo_uri:
+        raise ValueError("❌ Errore: MONGO_URI non trovato nel file .env")
+
+    client = MongoClient(mongo_uri)
     return client
 
 # Funzione per ottenere le collezioni
