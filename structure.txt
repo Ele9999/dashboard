@@ -1,0 +1,24 @@
+.
+├── Analytics
+│   ├── ahmia_analytics.py
+│   ├── telegram_analytics.py
+│   └── twitter_analytics.py
+├── Databases
+│   ├── __init__.py
+│   ├── ahmia.py
+│   ├── telegram.py
+│   └── twitter.py
+├── FinalDashboard.py
+├── QuestionsToDB
+│   ├── ahmia_info.py
+│   ├── telegram_info.py
+│   └── twitter_info.py
+├── README.md
+├── RansomwareAndRansomfeed
+│   └── ransomfeed.py
+├── structure.txt
+├── telegram_graph.py
+└── twitter_graph.py
+
+4 directories, 16 files
+

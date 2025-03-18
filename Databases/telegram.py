@@ -25,7 +25,7 @@ if "rerun" in st.session_state and st.session_state["rerun"]:
 load_dotenv()
 
 def connect_to_mongo():
-    mongo_uri = os.getenv("MONGO_URI")  # Prende la stringa di connessione
+    mongo_uri = os.getenv("MONGO_URI") 
     
     if not mongo_uri:
         raise ValueError("❌ Errore: MONGO_URI non trovato nel file .env")

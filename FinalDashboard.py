@@ -14,29 +14,27 @@ if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 
 def login():
-    st.title("Gestione Dati MongoDB")
-
-    #st.snow()
-    #st.balloons()
+    st.title("Piattaforma di Threat Intelligence")
 
     st.markdown("""
-    ## Benvenuto nella dashboard di gestione MongoDB!
-    Questa applicazione ti consente di esplorare e analizzare i dati memorizzati nel tuo database MongoDB.
-    - Scegli un database dalla barra di navigazione per iniziare.
-    - Analizza i dati delle collezioni in modo interattivo.
+    ## Benvenuto nella Piattaforma di threat intelligence
+    Questa piattaforma ti consente di gestire fonti OSINT e visualizzare le informazioni.
+    - Scegli un database dalla barra di navigazione per iniziare ed assegna un livello di pericolosità ai messaggi.
+    - Analizza i dati delle collezioni in modo interattivo e studia le interazioni tra gli utenti con dei grafi.
+    - Interroga il database di tuo interesse grazie all'IA
     """)
-    if st.button("Search on Databases"):
+    if st.button("Analizza piattaforma"):
         st.session_state.logged_in = True
         st.rerun()
 
 def logout():
-    #inserire qui titolo e scritta nel caso volessimo riempire pure questa pagina
-    if st.button("Return to Homepage"):
+
+    if st.button("Torna all'homepage"):
         st.session_state.logged_in = False
         st.rerun()
 
-login_page = st.Page(login, title="Search on Databases", icon=":material/login:")
-home = st.Page(logout, title="Return Homepage", icon=":material/logout:")
+login_page = st.Page(login, title="Analizza piattaforma", icon=":material/login:")
+home = st.Page(logout, title="Torna all'homepage", icon=":material/logout:")
 
 ahmia = st.Page(ahmia_dashboard, title="Ahmia Scraping", icon=":material/database:")
 telegram = st.Page(telegram_dashboard, title="Telegram Scraping", icon=":material/database:")
@@ -67,3 +65,5 @@ else:
     pg = st.navigation([login_page])
 
 pg.run()
+
+

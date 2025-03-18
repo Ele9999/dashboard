@@ -380,7 +380,7 @@ def telegram_analytics_section():
     # -------------------------------------------------------
     # 4) Tabella elenco utenti
     # -------------------------------------------------------
-    st.subheader("📊 Tabella utenti e grafo")
+    st.subheader("📊 Tabella Utenti: dai più attivi ai meno attivi")
     users_data = get_users_table(collection)
     df_users = pd.DataFrame(users_data).rename(columns={
         "user_id": "UserID",
@@ -416,3 +416,5 @@ def telegram_analytics_section():
                 layout = "cola"
                 selected_node = st_link_analysis(elements, layout, node_styles, edge_styles)
                 st.session_state["selected_graph_node"] = selected_node
+
+
