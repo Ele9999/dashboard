@@ -12,9 +12,7 @@ if "rerun" in st.session_state and st.session_state["rerun"]:
     st.session_state["rerun"] = False
     st.experimental_rerun()
 
-################################################
-# Calcola total_posts, total_replies, e "top_interactions"
-################################################
+
 def get_users_table(collection):
     """
     Ritorna una lista di dict con:
@@ -24,10 +22,10 @@ def get_users_table(collection):
       - sender_name (str)
       - sender_username (str)
       - top_interactions (str) -> utenti che rispondono di più a questo user
-    Ordinata discendente su total_posts.
+    Impostata in ordine discendente su total_posts.
     """
 
-    # 1) total_posts: quanti messaggi totali un utente ha scritto
+    # Trovo i total post (quanti messaggi totali un utente ha scritto)
     pipeline_posts = [
         {"$group": {"_id": "$from_id.user_id", "count_posts": {"$sum": 1}}},
         {"$sort": {"count_posts": -1}}
@@ -35,7 +33,7 @@ def get_users_table(collection):
     agg_posts = list(collection.aggregate(pipeline_posts))
     posts_dict = {d["_id"]: d["count_posts"] for d in agg_posts}
 
-    # 2) total_replies: quante volte l'utente scrive un messaggio in reply
+    # Trovo i total replies (quante volte l'utente scrive un messaggio in reply)
     pipeline_replies = [
         {"$match": {"reply_to.reply_to_msg_id": {"$exists": True}}},
         {"$group": {"_id": "$from_id.user_id", "count_replies": {"$sum": 1}}}
@@ -43,7 +41,7 @@ def get_users_table(collection):
     agg_replies = list(collection.aggregate(pipeline_replies))
     replies_dict = {d["_id"]: d["count_replies"] for d in agg_replies}
 
-    # Raccolta di tutti gli user_id trovati
+    # Raccolgo tutti gli user_id trovati
     all_user_ids = set(posts_dict.keys()) | set(replies_dict.keys())
 
     users_data = []
@@ -51,7 +49,7 @@ def get_users_table(collection):
         total_p = posts_dict.get(uid, 0)
         total_r = replies_dict.get(uid, 0)
 
-        # Prendiamo un messaggio di esempio per sender_name e username
+        # Prendiamo un messaggio di esempio per un utente
         example_msg = collection.find_one({"from_id.user_id": uid})
         if example_msg:
             sender_name = example_msg.get("sender_name", "")
@@ -60,7 +58,7 @@ def get_users_table(collection):
             sender_name = ""
             sender_username = ""
 
-        # Calcoliamo chi risponde di più a QUESTO utente
+        # Calcoliamo chi risponde di più a questo utente
         top_interactions = _calculate_top_interactions(uid, collection)
 
         users_data.append({
@@ -72,7 +70,7 @@ def get_users_table(collection):
             "top_interactions": top_interactions
         })
 
-    # Ordiniamo discendente su total_posts
+    # Mettiamo total_posts in ordine discendente (ordiniamo da chi ha scritto più post a chi meno)
     users_data.sort(key=lambda x: x["total_posts"], reverse=True)
     return users_data
 
@@ -82,9 +80,9 @@ def _calculate_top_interactions(user_id, collection, limit=5):
       1) Troviamo tutti i messaggi pubblicati da user_id.
       2) Troviamo chi risponde a quei messaggi (reply_to).
       3) Raggruppiamo per l'autore delle risposte, ordiniamo e prendiamo i primi `limit`.
-    Restituisce una stringa, es: "User 123 (8 risposte), User 999 (3 risposte)".
+    Restituisce una stringa, es: "User x (8 risposte), User y (3 risposte)".
     """
-    # 1) Tutti i msg ID postati da user_id
+    # Trovo tutti gli id dei messaggi postati da user_id
     my_msg_ids = [doc["id"] for doc in collection.find(
         {"from_id.user_id": user_id},
         {"id": 1}
@@ -93,12 +91,12 @@ def _calculate_top_interactions(user_id, collection, limit=5):
     if not my_msg_ids:
         return ""
 
-    # 2) Troviamo i messaggi che rispondono ai msg in my_msg_ids
+    # Trovo i messaggi che rispondono ai messaggi in my_msg_ids
     cursor = collection.find({
         "reply_to.reply_to_msg_id": {"$in": my_msg_ids}
     }, {"from_id.user_id": 1})
 
-    # Contiamo quante risposte arrivano da ciascun autore
+    # Conto quante risposte arrivano da ciascun utente
     from_counts = {}
     for doc in cursor:
         replier = doc.get("from_id", {}).get("user_id", None)
@@ -108,11 +106,11 @@ def _calculate_top_interactions(user_id, collection, limit=5):
     if not from_counts:
         return ""
 
-    # 3) Ordino in base al numero di risposte (discendente)
+    # Ordino in ordine discendente in base al numero di risposte
     sorted_repliers = sorted(from_counts.items(), key=lambda x: x[1], reverse=True)
     top_n = sorted_repliers[:limit]
 
-    # Formatto la stringa con l’user_id e il conteggio risposte
+    # Formatto la stringa
     result_str = ", ".join([f"User {u} ({cnt} risp.)" for (u, cnt) in top_n])
     return result_str
 
@@ -129,11 +127,11 @@ def build_subgraph_for_user(user_id_str, collection):
     except:
         user_id_int = -1
 
-    # Fino a 50 messaggi dell’utente
+    # Imposto il limite di messaggi a 100
     user_docs = list(collection.find({"from_id.user_id": user_id_int}).limit(100))
     total_posts = len(user_docs)
 
-    # Troviamo sender_name/username
+    # Trovo sender_name/sender_username
     sender_name = ""
     sender_username = ""
     if user_docs:
@@ -141,10 +139,10 @@ def build_subgraph_for_user(user_id_str, collection):
         sender_name = doc0.get("sender_name", "")
         sender_username = doc0.get("sender_username", "")
 
-    # Determiniamo i messaggi ID
+    # Trovo l'id dei messaggi
     user_message_ids = {str(d.get("id","NO_ID")) for d in user_docs}
 
-    # Cerchiamo reply a questi 50 messaggi
+    # Cerco reply a questi 100 messaggi
     replies_cursor = collection.find({
         "reply_to.reply_to_msg_id": {
             "$in": [int(m) for m in user_message_ids if m.isdigit()]
@@ -173,7 +171,7 @@ def build_subgraph_for_user(user_id_str, collection):
         }
     }
 
-    # A) Costruiamo i nodi "messaggio" dell’utente
+    # Costruisco i nodi "messaggio" dell’utente
     for doc in user_docs:
         msg_id = str(doc.get("id","NO_ID"))
         reply_info = doc.get("reply_to")
@@ -189,7 +187,6 @@ def build_subgraph_for_user(user_id_str, collection):
                 }
             }
 
-        # Edge di "posted"
         edge_id = f"posted_{user_id_str}_{msg_id}"
         edges.append({
             "data": {
@@ -200,12 +197,12 @@ def build_subgraph_for_user(user_id_str, collection):
             }
         })
 
-    # B) Nodi e archi delle reply
+    # Trovo nodi e archi delle reply
     for doc in replies_list:
         reply_msg_id = str(doc.get("id","NO_ID"))
         from_user_int = doc.get("from_id",{}).get("user_id","Unknown")
         from_user_str = str(from_user_int)
-        # Se risponde l’utente stesso => USER_MAIN, altrimenti “USER”
+        # Se risponde l’utente stesso la label sarà USER_MAIN, altrimenti “USER”
         user_label = "USER_MAIN" if from_user_str == main_user_id_str else "USER"
 
         if from_user_str not in nodes:
@@ -304,49 +301,42 @@ def telegram_analytics_section():
     if "date" in df.columns:
         df["date"] = pd.to_datetime(df["date"])
 
-    # -------------------------------------------------------
-    # 1) Tabella ultimi messaggi (es. 10)
-    # -------------------------------------------------------
+    # Tabella ultimi messaggi
     ("📅 Numero di messaggi nel tempo")
     tab_chart_1, tab_data_1 = st.tabs(["Chart", "Data"])
-    with tab_chart_1:
-        # Grafico 1: numero messaggi nel tempo
+    with tab_chart_1: #Grafico
         if "date" in df.columns:
             st.subheader("📅 Numero di messaggi nel tempo")
             df_counts = df.resample("D", on="date").count()
-            #fig1 = px.line(df_counts, x=df_counts.index, y="message", labels={"message": "Numero di messaggi"})
-            #st.plotly_chart(fig1)
-
+            
             fig1 = px.line(df_counts, x=df_counts.index, y="message", 
                    labels={"message": "Numero di messaggi"}, 
-                   render_mode="svg")  # Forza SVG
+                   render_mode="svg")  
             st.plotly_chart(fig1)
-    with tab_data_1:
+    with tab_data_1: #Tabella
         st.subheader("Tabella ultimi messaggi")
         df_sorted = df.sort_values(by="date", ascending=False)
         st.dataframe(df_sorted.head(10))  # Ultimi 10 messaggi
-    # -------------------------------------------------------
-    # 2) Tabella pericolosità messaggi
-    # -------------------------------------------------------
+
+    # Tabella pericolosità messaggi
     st.subheader("⚠️ Distribuzione della pericolosità")
     tab_chart_2, tab_data_2 = st.tabs(["Chart", "Data"])
-    with tab_chart_2:
+    with tab_chart_2: 
         if "danger_level" in df.columns:
             fig2 = px.histogram(df, x="danger_level", nbins=10)
             st.plotly_chart(fig2)
-    with tab_data_2:
+    with tab_data_2: 
         if "danger_level" in df.columns:
             # Group by danger_level e contiamo quanti messaggi per livello
             df_danger = df.groupby("danger_level").size().reset_index(name="count")
             st.dataframe(df_danger)
         else:
             st.info("Nessun campo 'danger_level' nei documenti.")
-    # -------------------------------------------------------
-    # 3) Tabella parole frequenza
-    # -------------------------------------------------------
+
+    # Tabella parole frequenza
     st.subheader("🔍 Frequenza Parole Chiave")
     tab_chart_3, tab_data_3 = st.tabs(["Chart", "Data"])
-    with tab_chart_3:
+    with tab_chart_3: 
         if "message" in df.columns:
             keywords = ["murder", "bomb", "hacking", "hate", "knife", "blood", "bad"]
             word_counts = {k:0 for k in keywords}
@@ -377,9 +367,7 @@ def telegram_analytics_section():
         else:
             st.info("Nessuna colonna 'message' trovata.")
 
-    # -------------------------------------------------------
-    # 4) Tabella elenco utenti
-    # -------------------------------------------------------
+    # Tabella elenco utenti
     st.subheader("📊 Tabella Utenti: dai più attivi ai meno attivi")
     users_data = get_users_table(collection)
     df_users = pd.DataFrame(users_data).rename(columns={

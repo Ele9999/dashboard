@@ -4,7 +4,6 @@ from pymongo import MongoClient
 from bson.objectid import ObjectId
 import math
 from datetime import datetime, timedelta
-#from st_aggrid import AgGrid, GridOptionsBuilder
 import plotly.express as px
 import os
 from dotenv import load_dotenv
@@ -16,11 +15,6 @@ if "rerun" in st.session_state and st.session_state["rerun"]:
     st.session_state["rerun"] = False
     st.experimental_rerun()
 
-# Connessione al client MongoDB
-#@st.cache_resource
-#def connect_to_mongo():
-#    client = MongoClient('mongodb+srv://eleonorapapa:C6A62LvpNQBfTZ29@cluster0.p5axc.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0') 
-#    return client
 
 load_dotenv()
 
@@ -43,7 +37,7 @@ def load_data(client, db_name, collection_name):
     collection = client[db_name][collection_name]
     data = list(collection.find())
 
-    # Converti _id in stringa per compatibilità con Streamlit
+    # Converti _id in stringa (per compatibilità con Streamlit)
     for record in data:
         record["_id"] = str(record["_id"])
 
@@ -65,14 +59,12 @@ def update_record(record_id, pericolosita, comment, revised_by, collection):
     )
 
 def show_messages_from_collection(client, db_name, collection_name, fields_to_include):
-    # Ottieni la collezione specifica
     collection = client[db_name][collection_name]
     
-    # Ottieni i messaggi dalla collezione con solo i campi richiesti
+    # Ottieniamo i messaggi dalla collezione con solo i campi richiesti
     cursor = collection.find({}, fields_to_include)  # Proiezione dei campi
     messages = list(cursor)  # Converte il cursore in una lista
     
-    # Rimuove il campo _id o lo trasforma in stringa per compatibilità con Pandas
     for message in messages:
         message["_id"] = str(message["_id"])  # Converte l'_id in stringa
     
@@ -84,7 +76,7 @@ def show_messages_from_collection(client, db_name, collection_name, fields_to_in
 
 def classify_collections(client, db_name):
     db = client[db_name]  # Connetti al database
-    collections = db.list_collection_names()  # Ottieni tutte le collezioni
+    collections = db.list_collection_names() 
 
     num_groups = 0
     num_channels = 0
@@ -92,7 +84,7 @@ def classify_collections(client, db_name):
     # Itera su ciascuna collezione
     for collection_name in collections:
         collection = db[collection_name]
-        # Verifica se almeno un documento ha il campo "user"
+        # Verifica se almeno un documento ha il campo "sender_username"
         has_user = collection.count_documents({"sender_username": {"$exists": True}}, limit=1) > 0
 
         if has_user:
@@ -106,7 +98,7 @@ def get_active_users(collection):
     """
     Recupera gli utenti attivi con campi 'sender_name', 'sender_username' e 'danger_level'.
     """
-    query = {"sender_username": {"$exists": True}}  # Solo documenti che contengono 'user'
+    query = {"sender_username": {"$exists": True}}  # Solo documenti che contengono 'sender_username'
     projection = {"_id": 0, "sender_username": 1, "sender_name": 1, "danger_level": 1}
     return list(collection.find(query, projection))
 
@@ -123,10 +115,9 @@ def show_all_collections_data(client, db_name, fields_to_include):
         collection = db[collection_name]
         data = list(collection.find({}, {field: 1 for field in fields_to_include}))
         for doc in data:
-            # Assicura che tutti i campi siano presenti
             for field in fields_to_include:
                 doc.setdefault(field, "")  # Imposta "" come valore predefinito per campi mancanti
-            doc['collection_name'] = collection_name  # Aggiungi il nome della collezione
+            doc['collection_name'] = collection_name  
         combined_data.extend(data)
 
     return pd.DataFrame(combined_data)
@@ -142,7 +133,7 @@ def get_group_user_messages(client, db_name):
 
     for collection_name in collections:
         collection = db[collection_name]
-        # Verifica se è un gruppo (contiene "sender_username")
+        # Verifica se è un gruppo
         is_group = collection.count_documents({"sender_username": {"$exists": True}}, limit=1) > 0
 
         if is_group:
@@ -167,7 +158,7 @@ def get_channel_messages(client, db_name):
 
     for collection_name in collections:
         collection = db[collection_name]
-        # Verifica se è un canale (non contiene "sender_username")
+        # Verifica se è un canale
         is_channel = collection.count_documents({"sender_username": {"$exists": False}}, limit=1) > 0
 
         if is_channel:
@@ -305,38 +296,23 @@ def telegram_dashboard():
     client = connect_to_mongo()
     db_name = 'telegram_scraping'
 
-    # Ottieni le collezioni disponibili
+    # Ottieniamo le collezioni disponibili
     db = client[db_name]
     collections = db.list_collection_names()
     collections_with_all = ["Tutte le collezioni"] + collections
-    # Seleziona la collezione da analizzare
+
     selected_collection = st.selectbox("Seleziona una collezione", collections_with_all)
 
 #################PRIMA SEZIONE DASHBOARD
     num_groups, num_channels = classify_collections(client, db_name)
 
-    #TODO numero di messaggi nuovi per collezione #DA RIVEDERE
-    ##start_of_today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    ##num_messages_today = 0
-    ##for col_name in selected_collection: #conta i nuovi messaggi dalla collezione selezionata (modificare con "collections" nel caso di una unica)
-    ##    collection = client[db_name][col_name]
-    ##    num_messages_today += collection.count_documents({"timestamp": {"$gte": start_of_today}})
+    # Numero di messaggi nuovi per collezione 
     start_of_today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
     num_messages_today = sum(
         client[db_name][col].count_documents({"date": {"$gte": start_of_today}})
         for col in collections
     )
 
-    #start_of_today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-#
-    #num_messages_today = 0
-    #for col in collections:
-    #    collection = client[db_name][col]
-    #    num_messages_today += collection.count_documents({
-    #        "date": {
-    #            "$gte": start_of_today
-    #        }
-    #    })
 
     col1, col2, col3 = st.columns(3)
     
@@ -365,7 +341,7 @@ def telegram_dashboard():
 #################SECONDA SEZIONE DASHBOARD
 
     col1, col2 = st.columns(2)
-    # Definisci i campi che vuoi visualizzare
+
     fields_to_include = {
         "id": 1,  
         "message": 1,  
@@ -410,22 +386,22 @@ def telegram_dashboard():
                 # Mostra la tabella con i campi selezionati
                 st.dataframe(filtered_df)
         
-                # Seleziona una riga dalla tabella usando il messaggio come opzione visibile
+                # Seleziona una riga dalla tabella usando il messaggio
                 selected_index = None
                 if 'message' in filtered_df.columns:  # Verifica che la colonna 'message' esista
                     selected_index = st.selectbox(
                         "Seleziona una riga per vedere i dettagli",
-                        options=[None] + list(filtered_df.index),  # Aggiungi l'opzione None
+                        options=[None] + list(filtered_df.index),  
                         format_func=lambda idx: filtered_df.loc[idx, 'message'] if idx is not None else "Nessuna selezione"
                     )
                 else:
                     selected_index = st.selectbox(
                         "Seleziona una riga per vedere i dettagli",
-                        options=[None] + list(filtered_df.index),  # Aggiungi l'opzione None
+                        options=[None] + list(filtered_df.index),  
                         format_func=lambda idx: f"Riga {idx}" if idx is not None else "Nessuna selezione"
                     )
         
-                # Mostra i dettagli solo se una riga è stata selezionata
+
                 if selected_index is not None:
                     # Mostra i dettagli della riga selezionata
                     selected_message = df.loc[selected_index]
@@ -438,7 +414,6 @@ def telegram_dashboard():
 
     with col2:
 
-        # Dashboard: Utenti Attivi --> cambiare scritta nel caso in cui sia una collezione e non un gruppo in "pericolosità messaggi"
         if selected_collection:
             st.subheader(f"Utenti Attivi: {selected_collection}")
 
@@ -483,32 +458,28 @@ def telegram_dashboard():
                         st.info("Nessun messaggio trovato per questo canale.")
 #################SECONDA SEZIONE DASHBOARD
 
-#################TERZA SEZIONE DASHBOARD (Feedback e pericolosità)
-    ####Impostare il fatto che quando si seleziona un messaggio si possa espandere il messaggio e poter inserire un livello di pericolosità con i dati sotto
+#################TERZA SEZIONE DASHBOARD
     if selected_collection:
         df = load_data(client, db_name, selected_collection)
 
         ## Selezione del messaggio da analizzare
         if not df.empty:
-            #st.subheader(f"Dati della collezione: {selected_collection} (Database: {db_name})")
             with st.expander(f"Dati della collezione: {selected_collection} (Database: {db_name})"):
                 st.dataframe(df)
 
-            #seleziona un record
             selected_index = st.selectbox("Seleiona un record", df.index)
 
             if selected_index is not None:
                 # Mostra il record selezionato
                 selected_record = df.loc[selected_index]
-                #st.write("Record selezionato:")
                 with st.expander("Record selezionato"):
                     st.json(selected_record.to_dict())
 
-                # Modifica del record
+                # Modifica del record selezionato
                 st.subheader("Modifica Record")
                 pericolosita = selected_record.get("danger_level", 5)
                 if pericolosita is None or math.isnan(pericolosita):
-                    pericolosita = 5  # Imposta valore predefinito se danger_level è NaN
+                    pericolosita = 5  # Imposta valore predefinito a 5 se danger_level è NaN
 
                 pericolosita = st.slider("Pericolosità (0-10)", 0, 10, int(pericolosita), key="slider_modifica_record")
                 comment = st.text_input("Commento Utente", selected_record.get("user_comment", ""))
@@ -541,7 +512,7 @@ def telegram_dashboard():
         st.subheader("Messaggi revisionati")
         st.dataframe(revisionati[["message", "danger_level", "user_comment"]])
 
-        # Modifica feedback
+        # Modifica dei feedback
         revisionati["selezione"] = revisionati["message"] + " (ID: " + revisionati["_id"] + ")"
         selected_revised = st.selectbox(
             "Seleziona un messaggio revisionato per cambiare feedback",
@@ -553,7 +524,7 @@ def telegram_dashboard():
             st.write("**Contenuto del messaggio:**")
             st.write(record["message"])
 
-            # Form per modificare feedback
+            # Form per modificare i feedback
             nuovo_pericolosita = st.slider(
                 "Pericolosità (0-10)",
                 0,

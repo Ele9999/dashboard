@@ -11,8 +11,7 @@ from Databases.telegram import connect_to_mongo
 import json
 import os
 from dotenv import load_dotenv
-#from openai import OpenAI
-#client_openai = OpenAI()
+
 
 if "rerun" in st.session_state and st.session_state["rerun"]:
     st.session_state["rerun"] = False
@@ -67,7 +66,7 @@ def execute_query(query, collection_name):
     except Exception as e:
         return pd.DataFrame(), str(e)
 
-# Funzione per analizzare i risultati con OpenAI
+# Funzione per analizzare i risultati 
 def analyze_results(df):
     if df.empty:
         return "Nessun risultato trovato."
@@ -82,7 +81,7 @@ def analyze_results(df):
 
     return response["choices"][0]["message"]["content"]
 
-# Funzione principale della chat in Streamlit
+# Funzione principale
 def chat_info_telegram():
     # Connessione al database
     client = connect_to_mongo()

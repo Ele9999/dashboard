@@ -24,7 +24,7 @@ def get_users_table(collection):
         user = doc["_id"]
         total = doc["total_posts"]
 
-        # Troviamo un messaggio a caso di questo utente
+        # Troviamo un messaggio d'esempio di questo utente
         example_msg = collection.find_one({"username": user})
         tag_user = example_msg.get("tag_username", "") if example_msg else ""
 
@@ -45,12 +45,12 @@ def build_subgraph_for_user(chosen_username, collection):
     user_docs = list(collection.find({"username": chosen_username}).limit(50))
     total_posts = len(user_docs)
 
-    # Troviamo sender_name/username se c’è
+    # Troviamo tag_username se c’è
     tag_user = ""
     if user_docs:
         tag_user = user_docs[0].get("tag_username", "")
 
-    # Determiniamo i messaggi ID
+    # Determiniamo l'id dei messaggi
     user_node_ids = chosen_username
 
     # Nodo principale “USER_MAIN”
@@ -64,7 +64,7 @@ def build_subgraph_for_user(chosen_username, collection):
         }
     }
 
-    # A) Costruiamo i nodi messaggi dell’utente
+    # Costruiamo i nodi messaggi dell’utente
     for doc in user_docs:
         msg_id = str(doc.get("id","NO_ID"))
         content = doc.get("content", "")
@@ -88,10 +88,10 @@ def build_subgraph_for_user(chosen_username, collection):
             }
         })
 
-        # Se doc["reshared"] non è vuoto (lista di ID?), creiamo archi
+        # Se doc["reshared"] non è vuoto, creiamo archi
         reshared_list = doc.get("reshared", [])
         for original in reshared_list:
-            # Esempio: creiamo un nodo placeholder "MSG_ORIG_{original}"
+
             original_id = f"MSG_ORIG_{original}"
             if original_id not in nodes:
                 nodes[original_id] = {
@@ -101,7 +101,7 @@ def build_subgraph_for_user(chosen_username, collection):
                         "content": f"Original: {original}"
                     }
                 }
-            # Arco: msg_id_str -> original_id
+           
             e_id = f"reshare_{msg_id}_{original_id}"
             edges.append({
                 "data": {
@@ -112,10 +112,6 @@ def build_subgraph_for_user(chosen_username, collection):
                 }
             })
 
-        # Se doc["reposts"] non è vuoto (dipende da come è strutturato),
-        # gestisci analogamente, creando archi "REPOST"
-
-        # Se doc["comments"] è una lista di commenti, potresti fare un nodo per ogni comment, ecc.
     return {
         "nodes": list(nodes.values()),
         "edges": edges
@@ -156,7 +152,7 @@ def twitter_analytics_section():
 
     collection = db[selected_collection]
 
-    # Esempio di query per estrarre i dati
+    # Query per estrarre i dati
     query = {}
     if date_filter:
         query["date"] = {"$gte": date_filter}
@@ -171,7 +167,7 @@ def twitter_analytics_section():
     if "date" in df.columns:
         df["date"] = pd.to_datetime(df["date"])
 
-    # Grafico 1: numero messaggi nel tempo
+    # Grafico numero messaggi nel tempo
     st.subheader("📅 Numero di messaggi nel tempo")
     tab_chart_1, tab_data_1 = st.tabs(["Chart", "Data"])
     with tab_chart_1:
@@ -179,12 +175,11 @@ def twitter_analytics_section():
         if "date" in df.columns:
             st.subheader("📅 Numero di messaggi nel tempo")
             df_counts = df.resample("D", on="date").count()
-            #fig1 = px.line(df_counts, x=df_counts.index, y="message", labels={"message": "Numero di messaggi"})
-            #st.plotly_chart(fig1)
+           
 
             fig1 = px.line(df_counts, x=df_counts.index, y="content", 
                    labels={"content": "Numero di messaggi"}, 
-                   render_mode="svg")  # Forza SVG
+                   render_mode="svg")  
             st.plotly_chart(fig1)
 
     with tab_data_1:
@@ -192,7 +187,7 @@ def twitter_analytics_section():
         df_sorted = df.sort_values(by="date", ascending=False)
         st.dataframe(df_sorted.head(10)) 
 
-    # **Grafico 2: Distribuzione della pericolosità**
+    # Grafico distribuzione della pericolosità
     st.subheader("⚠️ Distribuzione della pericolosità")
     tab_chart_2, tab_data_2 = st.tabs(["Chart", "Data"])
     with tab_chart_2:
@@ -210,7 +205,7 @@ def twitter_analytics_section():
         else:
             st.info("Nessun campo 'danger_level' nei documenti.")
 
-    # Grafico 3: Frequenza parole chiave (se esiste la colonna "message")
+    # Grafico frequenza parole chiave
     st.subheader("🔍 Frequenza Parole Chiave")
     tab_chart_3, tab_data_3 = st.tabs(["Chart", "Data"])
     with tab_chart_3:
@@ -245,9 +240,9 @@ def twitter_analytics_section():
             st.info("Nessuna colonna 'content' trovata.")
 
 
-    #######################################################
-    # Sezione GRAFO di interazioni
-    #######################################################
+    
+    # Creazione grafo di interazioni
+
     st.subheader("📊 Tabella utenti e grafo")
     users_data = get_users_table(collection)
     df_users = pd.DataFrame(users_data).rename(columns={
@@ -282,54 +277,3 @@ def twitter_analytics_section():
                 layout = "cola"
                 selected_node = st_link_analysis(elements, layout, node_styles, edge_styles)
                 st.session_state["selected_graph_node"] = selected_node
-
-    #st.title("📊 Tabella Utenti e Grafo")
-    #st.header("Individuare un utente di interesse, scriverlo e premere il bottone")
-#
-    ## 1) Mostriamo tabella utenti
-    #users_data = get_users_table(collection)
-    #if not users_data:
-    #    st.warning("Nessun utente trovato.")
-    #    return
-#
-    #df_users = pd.DataFrame(users_data)
-    #st.subheader("Elenco utenti (ordinati per post)")
-    #st.dataframe(df_users)
-#
-    ## 2) Input manuale: user digita un `username`
-    #chosen_user = st.text_input("Scrivi il 'username' da analizzare (es. 'FAISAL ABBAS')", "")
-#
-    ## 3) Bottone
-    #if st.button("Mostra Grafo"):
-    #    if not chosen_user:
-    #        st.error("Inserisci un username valido!")
-    #    else:
-    #        elements = build_subgraph_for_user(chosen_user, collection)
-    #        if not elements["nodes"] and not elements["edges"]:
-    #            st.info("Nessun dato per questo utente (o limitato a 50).")
-    #        else:
-    #            # Definiamo stili
-    #            node_styles = [
-    #                NodeStyle("USER_MAIN", color="#FF0000", caption="name", icon="person"),
-    #                NodeStyle("MESSAGE_MAIN", color="#3EB489", caption="content", icon="description"),
-    #                NodeStyle("MESSAGE_RESHARED", color="#2A629A", caption="content", icon="description"),
-    #            ]
-    #            edge_styles = [
-    #                EdgeStyle("*", caption="label", directed=True),
-    #            ]
-#
-    #            layout = "circle"
-    #            selected_node = st_link_analysis(elements, layout, node_styles, edge_styles)
-#
-    #            # Mostriamo dettagli del nodo
-    #            if selected_node:
-    #                st.markdown(f"### Dettagli: `{selected_node['name']}`")
-    #                if "MESSAGE" in selected_node["label"]:
-    #                    st.write("**Contenuto**:", selected_node.get("content",""))
-    #                else:
-    #                    st.write("**Utente**:", selected_node["name"])
-    #                    if "tag_username" in selected_node:
-    #                        st.write("tag_username:", selected_node["tag_username"])
-    #                    if "total_posts" in selected_node:
-    #                        st.write("Post pubblicati:", selected_node["total_posts"])
-#

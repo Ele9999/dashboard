@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 
 @st.cache_resource
 def connect_to_mongo():
-    client = MongoClient('mongodb+srv://eleonorapapa:C6A62LvpNQBfTZ29@clusterdb.30irz.mongodb.net/?retryWrites=true&w=majority&appName=ClusterDB') 
+    client = MongoClient('') 
     return client
 
 # Funzione per ottenere le collezioni
@@ -60,7 +60,7 @@ def classify_collections(client, db_name):
 
     return num_groups, num_channels
 
-# Ottieni utenti attivi (aziende/entità)
+# Ottieni utenti attivi (aziende)
 def get_active_users(collection):
     query = {"nome": {"$exists": True}}
     projection = {"_id": 0, "nome": 1, "paese": 1, "risk_assessment.score": 1}
@@ -177,8 +177,7 @@ def ransomfeed_dashboard():
     else:
         st.info("Nessun dato di rischio disponibile.")
 
-    # Selezione azienda per dettagli
-    # Selezione azienda per dettagli
+    # Selezione dettagli azienda 
     st.subheader("🏢 Analizza una specifica azienda")
     
     selected_company = st.selectbox(
@@ -189,7 +188,7 @@ def ransomfeed_dashboard():
     if selected_company:
         company_data = risk_df[risk_df["nome"] == selected_company].iloc[0]
     
-        # Assicuriamoci che risk_assessment sia un dizionario, altrimenti impostiamo un valore vuoto
+        # Controlliamo che risk_assessment sia un dizionario, altrimenti impostiamo un valore vuoto
         risk_data = company_data["risk_assessment"] if isinstance(company_data["risk_assessment"], dict) else {}
     
         # Estraggo i valori con .get() per evitare errori

@@ -4,7 +4,6 @@ from pymongo import MongoClient
 from bson.objectid import ObjectId
 import math
 from datetime import datetime, timedelta
-#from st_aggrid import AgGrid, GridOptionsBuilder
 import plotly.express as px
 from Databases.ahmia import get_data_across_all_collections, connect_to_mongo
 
@@ -49,10 +48,10 @@ def ahmia_analytics_section():
 
     collection = db[selected_collection]
 
-    # Esempio di query per estrarre i dati
+    # Query per estrarre i dati
     query = {}
     if date_filter:
-        query["date"] = {"$gte": date_filter} #verificare funzionamento timestamp, nel json non c'è il valore della data
+        query["date"] = {"$gte": date_filter} 
     data = list(collection.find(query, {"content": 1, "danger_level": 1, "date": 1}))
     df = pd.DataFrame(data)
     
@@ -65,7 +64,7 @@ def ahmia_analytics_section():
         df[date_filter] = pd.to_datetime(df[date_filter])
 
 
-    # **Grafico 2: Distribuzione della pericolosità**
+    # Grafico distribuzione della pericolosità
     st.subheader("⚠️ Distribuzione della pericolosità")
     tab_chart_2, tab_data_2 = st.tabs(["Chart", "Data"])
     with tab_chart_2:
@@ -83,7 +82,7 @@ def ahmia_analytics_section():
         else:
             st.info("Nessun campo 'danger_level' nei documenti.")
 
-    # Grafico 3: Frequenza parole chiave (se esiste la colonna "message")
+    # Grafico frequenza parole chiave
     st.subheader("🔍 Frequenza Parole Chiave")
     tab_chart_3, tab_data_3 = st.tabs(["Chart", "Data"])
     with tab_chart_3:

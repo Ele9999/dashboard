@@ -11,11 +11,6 @@ if "rerun" in st.session_state and st.session_state["rerun"]:
     st.session_state["rerun"] = False
     st.experimental_rerun()
 
-## Connessione al client MongoDB
-#@st.cache_resource
-#def connect_to_mongo():
-#    client = MongoClient('mongodb+srv://eleonorapapa:C6A62LvpNQBfTZ29@cluster0.p5axc.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0')  # Inserisci la tua connection string
-#    return client
 
 load_dotenv()
 
@@ -38,7 +33,7 @@ def load_data(client, db_name, collection_name):
     collection = client[db_name][collection_name]
     data = list(collection.find())
 
-    # Converti _id in stringa per compatibilità con Streamlit
+    # Converti _id in stringa (per compatibilità con Streamlit)
     for record in data:
         record["_id"] = str(record["_id"])
 
@@ -60,14 +55,11 @@ def update_record(record_id, pericolosita, comment, revised_by, collection):
     )
 
 def show_messages_from_collection(client, db_name, collection_name, fields_to_include):
-    # Ottieni la collezione specifica
     collection = client[db_name][collection_name]
     
-    # Ottieni i messaggi dalla collezione con solo i campi richiesti
     cursor = collection.find({}, fields_to_include)  # Proiezione dei campi
     messages = list(cursor)  # Converte il cursore in una lista
     
-    # Rimuove il campo _id o lo trasforma in stringa per compatibilità con Pandas
     for message in messages:
         message["_id"] = str(message["_id"])  # Converte l'_id in stringa
     
@@ -78,8 +70,8 @@ def show_messages_from_collection(client, db_name, collection_name, fields_to_in
     return df
 
 def classify_collections(client, db_name):
-    db = client[db_name]  # Connetti al database
-    collections = db.list_collection_names()  # Ottieni tutte le collezioni
+    db = client[db_name]  # Connessione al database
+    collections = db.list_collection_names()  # Ottieniamo tutte le collezioni
 
     num_groups = 0
     num_channels = 0
@@ -87,7 +79,7 @@ def classify_collections(client, db_name):
     # Itera su ciascuna collezione
     for collection_name in collections:
         collection = db[collection_name]
-        # Verifica se almeno un documento ha il campo "user"
+        # Verifica se almeno un documento ha il campo "tag_username"
         has_user = collection.count_documents({"tag_username": {"$exists": True}}, limit=1) > 0
 
         if has_user:
@@ -101,7 +93,7 @@ def get_active_users(collection):
     """
     Recupera gli utenti attivi con campi 'username', 'tag_username' e 'danger_level'.
     """
-    query = {"tag_username": {"$exists": True}}  # Solo documenti che contengono 'user'
+    query = {"tag_username": {"$exists": True}}  
     projection = {"_id": 0, "tag_username": 1, "username": 1, "danger_level": 1}
     return list(collection.find(query, projection))
 
@@ -118,15 +110,13 @@ def show_all_collections_data(client, db_name, fields_to_include):
         collection = db[collection_name]
         data = list(collection.find({}, {field: 1 for field in fields_to_include}))
         for doc in data:
-            # Assicura che tutti i campi siano presenti
             for field in fields_to_include:
                 doc.setdefault(field, "")  # Imposta "" come valore predefinito per campi mancanti
-            doc['collection_name'] = collection_name  # Aggiungi il nome della collezione
+            doc['collection_name'] = collection_name  
         combined_data.extend(data)
 
     return pd.DataFrame(combined_data)
 
-##Utenti attivi
 def get_group_user_messages(client, db_name):
     """
     Ottiene tutti i messaggi per i gruppi con l'informazione di chi ha inviato cosa e in quale gruppo.
@@ -137,7 +127,7 @@ def get_group_user_messages(client, db_name):
 
     for collection_name in collections:
         collection = db[collection_name]
-        # Verifica se è un gruppo (contiene "tag_username")
+        # Verifica se è un gruppo 
         is_group = collection.count_documents({"tag_username": {"$exists": True}}, limit=1) > 0
 
         if is_group:
@@ -162,7 +152,7 @@ def get_channel_messages(client, db_name):
 
     for collection_name in collections:
         collection = db[collection_name]
-        # Verifica se è un canale (non contiene "tag_username")
+        # Verifica se è un canale
         is_channel = collection.count_documents({"tag_username": {"$exists": False}}, limit=1) > 0
 
         if is_channel:
@@ -303,15 +293,15 @@ def twitter_dashboard():
     db = client[db_name]
     collections = db.list_collection_names()
     collections_with_all = ["Tutte le collezioni"] + collections
-    # Seleziona la collezione da analizzare
+    # Collezione da analizzare
     selected_collection = st.selectbox("Seleziona una collezione", collections_with_all)
 
     num_groups, num_channels = classify_collections(client, db_name)
 
-    #TODO numero di messaggi nuovi per collezione #DA RIVEDERE
+    # Numero di messaggi nuovi per collezione 
     start_of_today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
     num_messages_today = 0
-    for col_name in selected_collection: #conta i nuovi messaggi dalla collezione selezionata (modificare con "collections" nel caso di una unica)
+    for col_name in selected_collection: #conta i nuovi messaggi dalla collezione selezionata 
         collection = client[db_name][col_name]
         num_messages_today += collection.count_documents({"timestamp": {"$gte": start_of_today}})
 
@@ -340,11 +330,9 @@ def twitter_dashboard():
 #################PRIMA SEZIONE DASHBOARD
 
 #################SECONDA SEZIONE DASHBOARD
-    #col1, col2 = st.column_config.Column(width="large")
     col1, col2 = st.columns(2)
-    #selected_collection = st.selectbox("Seleziona una collezione", collections) #scommentare se si vuole sotto a "statistiche" questa scelta
 
-    # Definisci i campi che vuoi visualizzare
+    # Definiamo i campi che si vogliono visualizzare
     fields_to_include = {
         "id": 1,  
         "content": 1,  
@@ -355,11 +343,7 @@ def twitter_dashboard():
         "revisioned_at": 1
     }
 
-    #fields_user_to_include = {
-    #    "username": 1,
-    #    "tag_username": 1,
-    #    "danger_level": 1
-    #}
+  
 
     with col1:
         if selected_collection:
@@ -387,22 +371,21 @@ def twitter_dashboard():
                 # Mostra la tabella con i campi selezionati
                 st.dataframe(filtered_df)
         
-                # Seleziona una riga dalla tabella usando il messaggio come opzione visibile
+                # Seleziona una riga dalla tabella usando il messaggio 
                 selected_index = None
-                if 'content' in filtered_df.columns:  # Verifica che la colonna 'message' esista
+                if 'content' in filtered_df.columns:  # Verifica che la colonna 'content' esista
                     selected_index = st.selectbox(
                         "Seleziona una riga per vedere i dettagli",
-                        options=[None] + list(filtered_df.index),  # Aggiungi l'opzione None
+                        options=[None] + list(filtered_df.index),  
                         format_func=lambda idx: filtered_df.loc[idx, 'content'] if idx is not None else "Nessuna selezione"
                     )
                 else:
                     selected_index = st.selectbox(
                         "Seleziona una riga per vedere i dettagli",
-                        options=[None] + list(filtered_df.index),  # Aggiungi l'opzione None
+                        options=[None] + list(filtered_df.index), 
                         format_func=lambda idx: f"Riga {idx}" if idx is not None else "Nessuna selezione"
                     )
         
-                # Mostra i dettagli solo se una riga è stata selezionata
                 if selected_index is not None:
                     # Mostra i dettagli della riga selezionata
                     selected_message = df.loc[selected_index]
@@ -413,7 +396,6 @@ def twitter_dashboard():
                 st.info("Nessun messaggio trovato nella collezione selezionata.")
 
     with col2:
-        # Dashboard: Utenti Attivi --> cambiare scritta nel caso in cui sia una collezione e non un gruppo in "pericolosità messaggi"
         if selected_collection:
             st.subheader(f"Utenti Attivi: {selected_collection}")
 
@@ -458,18 +440,15 @@ def twitter_dashboard():
                         st.info("Nessun messaggio trovato per questo canale.")
 #################SECONDA SEZIONE DASHBOARD
 
-#################TERZA SEZIONE DASHBOARD (Feedback e pericolosità)
-    ####Impostare il fatto che quando si seleziona un messaggio si possa espandere il messaggio e poter inserire un livello di pericolosità con i dati sotto
+#################TERZA SEZIONE DASHBOARD 
     if selected_collection:
         df = load_data(client, db_name, selected_collection)
 
-        ## Selezione del messaggio da analizzare
+        # Selezione del messaggio da analizzare
         if not df.empty:
-            #st.subheader(f"Dati della collezione: {selected_collection} (Database: {db_name})")
             with st.expander(f"Dati della collezione: {selected_collection} (Database: {db_name})"):
                 st.dataframe(df)
 
-            #seleziona un record
             selected_index = st.selectbox("Seleziona un record", df.index)
 
             if selected_index is not None:
@@ -479,11 +458,11 @@ def twitter_dashboard():
                 with st.expander("Record selezionato"):
                     st.json(selected_record.to_dict())
 
-                # Modifica del record
+                # Modifica del record selezionato
                 st.subheader("Modifica Record")
                 pericolosita = selected_record.get("danger_level", 5)
                 if pericolosita is None or math.isnan(pericolosita):
-                    pericolosita = 5  # Imposta valore predefinito se danger_level è NaN
+                    pericolosita = 5  # Imposta valore predefinito a 5 se danger_level è NaN
 
                 pericolosita = st.slider("Pericolosità (0-10)", 0, 10, int(pericolosita), key="slider_modifica_record")
                 comment = st.text_input("Commento Utente", selected_record.get("user_comment", ""))
@@ -516,7 +495,7 @@ def twitter_dashboard():
         st.subheader("Messaggi revisionati")
         st.dataframe(revisionati[["content", "danger_level", "user_comment"]])
 
-        # Modifica feedback
+        # Modifica dei feedback
         revisionati["selezione"] = revisionati["content"] + " (ID: " + revisionati["_id"] + ")"
         selected_revised = st.selectbox(
             "Seleziona un messaggio revisionato per cambiare feedback",
@@ -528,7 +507,7 @@ def twitter_dashboard():
             st.write("**Contenuto del messaggio:**")
             st.write(record["content"])
 
-            # Form per modificare feedback
+            # Form per modificare i feedback
             nuovo_pericolosita = st.slider(
                 "Pericolosità (0-10)",
                 0,
